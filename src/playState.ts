@@ -167,20 +167,9 @@ export class PlayState implements IGameState {
     this.terrain = [...terrain, ...walls, ground];
 
     this.voxelWorld = new VoxelWorld(this.scene, this.physicsWorld.world, this.config);
-    
+
     // Instead of generating voxel terrain, create voxel structures on the regular terrain
     this.createVoxelStructures(halfWorldSize);
-
-    // Add the update method to the terrain array so it gets updated each frame
-    this.terrain.push({
-      mesh: null as any,
-      body: null as any,
-      update: (deltaTime: number) => {
-        if (this.voxelWorld) {
-          this.voxelWorld.update(deltaTime);
-        }
-      }
-    });
 
     const playerPosition = new THREE.Vector3(0, 0.4, 0);
     // Create player tank at valid position
@@ -212,7 +201,7 @@ export class PlayState implements IGameState {
   handleInput(input: InputState): void {
     const soundManager = this.gameStateManager.initSoundManager();
     // Only process tank movement controls if not in fly mode
-    if (!this.flyCamera.enable) {
+    if (!this.flyCamera.isEnabled()) {
       if (input.forward) {
         this.player.move(1);
         soundManager.startMovementNoise();
@@ -306,14 +295,14 @@ export class PlayState implements IGameState {
   update(deltaTime: number): void {
     if (this.gameOver) return;
 
+    this.voxelWorld.update(deltaTime);
+
     this.handleInput(this.input!);
 
     this.physicsWorld.update(deltaTime);
 
     // Update player and enemies
-    if (this.player.update) {
-      this.player.update();
-    }
+    this.player.update();
 
     this.enemies.forEach(enemy => {
       if (enemy.update) {
@@ -1340,35 +1329,35 @@ export class PlayState implements IGameState {
   private createVoxelStructures(halfWorldSize: number): void {
     // Create a few buildings scattered around the map
     const buildingCount = 10;
-    
+
     for (let i = 0; i < buildingCount; i++) {
       // Random position within world bounds (but not too close to the edge)
       const x = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
-      
+
       // Find terrain height at this position
       const groundY = 0;
-      
+
       if (groundY !== null) {
         // Create a building on this spot
         this.createBuilding(x, groundY, z);
       }
     }
-    
+
     // Create some barricades/barriers
     const barrierCount = 15;
-    
+
     for (let i = 0; i < barrierCount; i++) {
       const x = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
-      
+
       this.createBarrier(x, 0.4, z);
     }
-    
+
     // Create a larger central structure/fortress
     this.createFortress(0, 0.4, 0);
   }
-  
+
   /**
    * Creates a voxel building at the specified position
    */
@@ -1377,13 +1366,13 @@ export class PlayState implements IGameState {
     const width = 3 + Math.floor(Math.random() * 4);
     const depth = 3 + Math.floor(Math.random() * 4);
     const height = 3 + Math.floor(Math.random() * 5);
-    
+
     // Choose a building material
     const materials = [VoxelMaterial.BRICK, VoxelMaterial.CONCRETE, VoxelMaterial.METAL];
     const material = materials[Math.floor(Math.random() * materials.length)];
-    
+
     // Create the building structure
-    
+
     // Create walls
     for (let dx = 0; dx < width; dx++) {
       for (let dz = 0; dz < depth; dz++) {
@@ -1399,11 +1388,11 @@ export class PlayState implements IGameState {
         }
       }
     }
-    
+
     // Randomly add a door
     const doorSide = Math.floor(Math.random() * 4);
     let doorX, doorZ;
-    
+
     switch (doorSide) {
       case 0: // North wall
         doorX = x + Math.floor(width / 2);
@@ -1422,21 +1411,21 @@ export class PlayState implements IGameState {
         doorZ = z + Math.floor(depth / 2);
         break;
     }
-    
+
     // Create a door (empty space)
     if (doorX !== undefined && doorZ !== undefined) {
       this.voxelWorld.setVoxel({ x: doorX, y: y + 1, z: doorZ }, undefined);
       this.voxelWorld.setVoxel({ x: doorX, y: y + 2, z: doorZ }, undefined);
     }
-    
+
     // Add windows (randomly)
     const windowCount = Math.floor(Math.random() * 4) + 1;
-    
+
     for (let i = 0; i < windowCount; i++) {
       // Choose a random wall
       const windowSide = Math.floor(Math.random() * 4);
       let windowX, windowZ;
-      
+
       switch (windowSide) {
         case 0: // North
           windowX = x + 1 + Math.floor(Math.random() * (width - 2));
@@ -1455,7 +1444,7 @@ export class PlayState implements IGameState {
           windowZ = z + 1 + Math.floor(Math.random() * (depth - 2));
           break;
       }
-      
+
       if (windowX !== undefined && windowZ !== undefined) {
         // Window height is usually in the middle of the wall
         const windowY = y + Math.floor(height / 2);
@@ -1463,14 +1452,14 @@ export class PlayState implements IGameState {
       }
     }
   }
-  
+
   /**
    * Creates a barrier/barricade at the specified position
    */
   private createBarrier(x: number, y: number, z: number): void {
     // Randomly choose between several barrier types
     const barrierType = Math.floor(Math.random() * 4);
-    
+
     switch (barrierType) {
       case 0: // Sandbag wall
         this.createSandbagWall(x, y, z);
@@ -1486,14 +1475,14 @@ export class PlayState implements IGameState {
         break;
     }
   }
-  
+
   /**
    * Creates a sandbag wall
    */
   private createSandbagWall(x: number, y: number, z: number): void {
     const length = 3 + Math.floor(Math.random() * 5);
     const direction = Math.random() > 0.5 ? 'x' : 'z';
-    
+
     for (let i = 0; i < length; i++) {
       for (let h = 0; h < 2; h++) { // 2 sandbags high
         if (direction === 'x') {
@@ -1504,14 +1493,14 @@ export class PlayState implements IGameState {
       }
     }
   }
-  
+
   /**
    * Creates concrete barriers
    */
   private createConcreteBarriers(x: number, y: number, z: number): void {
     const length = 3 + Math.floor(Math.random() * 5);
     const direction = Math.random() > 0.5 ? 'x' : 'z';
-    
+
     for (let i = 0; i < length; i++) {
       if (Math.random() > 0.2) { // 80% chance to place a barrier (creates gaps)
         if (direction === 'x') {
@@ -1524,14 +1513,14 @@ export class PlayState implements IGameState {
       }
     }
   }
-  
+
   /**
    * Creates a metal barricade
    */
   private createMetalBarricade(x: number, y: number, z: number): void {
     const length = 3 + Math.floor(Math.random() * 4);
     const direction = Math.random() > 0.5 ? 'x' : 'z';
-    
+
     for (let i = 0; i < length; i++) {
       if (direction === 'x') {
         this.voxelWorld.setVoxel({ x: x + i, y: y + 1, z }, VoxelMaterial.METAL);
@@ -1550,14 +1539,14 @@ export class PlayState implements IGameState {
       }
     }
   }
-  
+
   /**
    * Creates a wooden fence
    */
   private createWoodenFence(x: number, y: number, z: number): void {
     const length = 4 + Math.floor(Math.random() * 6);
     const direction = Math.random() > 0.5 ? 'x' : 'z';
-    
+
     for (let i = 0; i < length; i++) {
       if (direction === 'x') {
         // Fence posts
@@ -1578,7 +1567,7 @@ export class PlayState implements IGameState {
       }
     }
   }
-  
+
   /**
    * Creates a central fortress structure
    */
@@ -1586,7 +1575,7 @@ export class PlayState implements IGameState {
     // Main fortress parameters
     const size = 10;
     const wallHeight = 6;
-    
+
     // Create the outer walls
     for (let dx = 0; dx < size; dx++) {
       for (let dz = 0; dz < size; dz++) {
@@ -1594,15 +1583,15 @@ export class PlayState implements IGameState {
         if (dx === 0 || dx === size - 1 || dz === 0 || dz === size - 1) {
           for (let dy = 0; dy < wallHeight; dy++) {
             this.voxelWorld.setVoxel({
-              x: x + dx - Math.floor(size/2),
+              x: x + dx - Math.floor(size / 2),
               y: y + dy + 1,
-              z: z + dz - Math.floor(size/2)
+              z: z + dz - Math.floor(size / 2)
             }, VoxelMaterial.STONE);
           }
         }
       }
     }
-    
+
     // Create towers at each corner
     const towerHeight = wallHeight + 2;
     const corners = [
@@ -1611,21 +1600,21 @@ export class PlayState implements IGameState {
       { dx: size - 1, dz: 0 },
       { dx: size - 1, dz: size - 1 }
     ];
-    
+
     corners.forEach(corner => {
       for (let dy = 0; dy < towerHeight; dy++) {
         // 2x2 tower at each corner
         for (let tx = 0; tx < 2; tx++) {
           for (let tz = 0; tz < 2; tz++) {
             this.voxelWorld.setVoxel({
-              x: x + corner.dx + (corner.dx === 0 ? -tx : tx) - Math.floor(size/2),
+              x: x + corner.dx + (corner.dx === 0 ? -tx : tx) - Math.floor(size / 2),
               y: y + dy + 1,
-              z: z + corner.dz + (corner.dz === 0 ? -tz : tz) - Math.floor(size/2)
+              z: z + corner.dz + (corner.dz === 0 ? -tz : tz) - Math.floor(size / 2)
             }, VoxelMaterial.STONE);
           }
         }
       }
-      
+
       // Add battlements on top of towers
       for (let tx = -1; tx <= 2; tx++) {
         for (let tz = -1; tz <= 2; tz++) {
@@ -1634,59 +1623,59 @@ export class PlayState implements IGameState {
               // Skip diagonal corners
               continue;
             }
-            
+
             this.voxelWorld.setVoxel({
-              x: x + corner.dx + (corner.dx === 0 ? tx : tx) - Math.floor(size/2),
+              x: x + corner.dx + (corner.dx === 0 ? tx : tx) - Math.floor(size / 2),
               y: y + towerHeight + 1,
-              z: z + corner.dz + (corner.dz === 0 ? tz : tz) - Math.floor(size/2)
+              z: z + corner.dz + (corner.dz === 0 ? tz : tz) - Math.floor(size / 2)
             }, VoxelMaterial.STONE);
           }
         }
       }
     });
-    
+
     // Create entrance (gate)
     const entranceSide = Math.floor(Math.random() * 4);
     let entranceX, entranceZ;
-    
+
     switch (entranceSide) {
       case 0: // North wall
         entranceX = x;
-        entranceZ = z - Math.floor(size/2);
-        
+        entranceZ = z - Math.floor(size / 2);
+
         // Create opening
         for (let dy = 1; dy <= 3; dy++) {
           this.voxelWorld.setVoxel({ x: entranceX, y: y + dy, z: entranceZ }, undefined);
           this.voxelWorld.setVoxel({ x: entranceX + 1, y: y + dy, z: entranceZ }, undefined);
         }
         break;
-      
+
       case 1: // East wall
-        entranceX = x + Math.floor(size/2);
+        entranceX = x + Math.floor(size / 2);
         entranceZ = z;
-        
+
         // Create opening
         for (let dy = 1; dy <= 3; dy++) {
           this.voxelWorld.setVoxel({ x: entranceX, y: y + dy, z: entranceZ }, undefined);
           this.voxelWorld.setVoxel({ x: entranceX, y: y + dy, z: entranceZ + 1 }, undefined);
         }
         break;
-      
+
       case 2: // South wall
         entranceX = x;
-        entranceZ = z + Math.floor(size/2);
-        
+        entranceZ = z + Math.floor(size / 2);
+
         // Create opening
         for (let dy = 1; dy <= 3; dy++) {
           this.voxelWorld.setVoxel({ x: entranceX, y: y + dy, z: entranceZ }, undefined);
           this.voxelWorld.setVoxel({ x: entranceX + 1, y: y + dy, z: entranceZ }, undefined);
         }
         break;
-      
+
       case 3: // West wall
-        entranceX = x - Math.floor(size/2);
+        entranceX = x - Math.floor(size / 2);
         entranceZ = z;
-        
+
         // Create opening
         for (let dy = 1; dy <= 3; dy++) {
           this.voxelWorld.setVoxel({ x: entranceX, y: y + dy, z: entranceZ }, undefined);
@@ -1694,12 +1683,12 @@ export class PlayState implements IGameState {
         }
         break;
     }
-    
+
     // Create central building
     const innerSize = 5;
-    const innerX = x - Math.floor(innerSize/2);
-    const innerZ = z - Math.floor(innerSize/2);
-    
+    const innerX = x - Math.floor(innerSize / 2);
+    const innerZ = z - Math.floor(innerSize / 2);
+
     for (let dx = 0; dx < innerSize; dx++) {
       for (let dz = 0; dz < innerSize; dz++) {
         if (dx === 0 || dx === innerSize - 1 || dz === 0 || dz === innerSize - 1) {
@@ -1713,10 +1702,10 @@ export class PlayState implements IGameState {
         }
       }
     }
-    
+
     // Add roof to central building
     for (let dx = -1; dx <= innerSize; dx++) {
-      for(let dz = -1; dz <= innerSize; dz++) {
+      for (let dz = -1; dz <= innerSize; dz++) {
         this.voxelWorld.setVoxel({
           x: innerX + dx,
           y: y + 5,
@@ -1724,11 +1713,11 @@ export class PlayState implements IGameState {
         }, VoxelMaterial.METAL);
       }
     }
-    
+
     // Add a door to the central building
-    const innerEntranceX = innerX + Math.floor(innerSize/2);
+    const innerEntranceX = innerX + Math.floor(innerSize / 2);
     const innerEntranceZ = innerZ;
-    
+
     this.voxelWorld.setVoxel({ x: innerEntranceX, y: y + 1, z: innerEntranceZ }, undefined);
     this.voxelWorld.setVoxel({ x: innerEntranceX, y: y + 2, z: innerEntranceZ }, undefined);
   }
@@ -1740,28 +1729,28 @@ export class PlayState implements IGameState {
     if (distanceToPlayer < 100) {
       return false;
     }
-    
+
     // Check collision with obstacles
     for (const obstacle of this.terrain) {
       // Skip ground and non-collidable objects
       if (!obstacle.body || obstacle === this.terrain[this.terrain.length - 1]) {
         continue;
       }
-      
+
       const obstaclePos = obstacle.body.translation();
       const obstacleSize = 5; // Approximate size of obstacles
-      
+
       // Simple bounding box collision check
       const distance = Math.sqrt(
         Math.pow(position.x - obstaclePos.x, 2) +
         Math.pow(position.z - obstaclePos.z, 2)
       );
-      
+
       if (distance < obstacleSize + 3) { // Adding 3 units buffer
         return false; // Too close to an obstacle
       }
     }
-    
+
     return true;
   }
 }

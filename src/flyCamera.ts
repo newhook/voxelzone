@@ -69,6 +69,10 @@ export class FlyCamera {
     });
   }
   
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
   enable(): void {
     if (!this.enabled) {
       // Store current camera state before entering fly mode
