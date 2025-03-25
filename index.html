@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battlezone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000000;
+        }
+        canvas {
+            display: block;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #00ff00;
+            font-family: monospace;
+            font-size: 24px;
+            text-align: center;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #00ff00;
+            font-family: monospace;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border: 1px solid #00ff00;
+            transition: opacity 1s ease-out;
+            opacity: 1;
+            display: none; /* Initially hidden */
+        }
+        #score {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #00ff00;
+            font-family: monospace;
+            font-size: 24px;
+            opacity: 0; /* Initially hidden */
+            transition: opacity 0.5s ease-in-out;
+        }
+        
+        #fps {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #00ff00;
+            font-family: monospace;
+            font-size: 16px;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 5px;
+            opacity: 0; /* Initially hidden */
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        #title-screen {
+            transition: opacity 1s ease-in-out;
+        }
+    </style>
+    
+</head>
+<body>
+    <div id="loading">Loading Battlezone...</div>
+    <div id="score">SCORE: 0</div>
+    <div id="fps">FPS: 0</div>
+    <div id="instructions">
+        <h3>CONTROLS:</h3>
+        <p>W/↑: Move Forward</p>
+        <p>S/↓: Move Backward</p>
+        <p>A/←: Turn Left</p>
+        <p>D/→: Turn Right</p>
+        <p>Mouse Movement: Rotate Turret</p>
+        <p>Q/E: Rotate Turret (alternate)</p>
+        <p>Left Mouse Button/SPACE: Fire</p>
+        <p>F: Toggle Fly Camera</p>
+        <p>SHIFT+W: Toggle Wireframe Mode</p>
+    </div>
+
+    <!-- Test if scripts are loading at all -->
+    <script>
+        console.log("Inline script executed");
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("DOMContentLoaded from inline script");
+        });
+    </script>
+
+    <script>
+        document.addEventListener('click', () => {
+            const audioPrompt = document.getElementById('audio-prompt');
+            if (audioPrompt) {
+                audioPrompt.style.display = 'none';
+            }
+        }, { once: true });
+    </script>
+    
+    <!-- Load the main entry point -->
+    <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
