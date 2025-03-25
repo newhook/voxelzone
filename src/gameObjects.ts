@@ -8,6 +8,7 @@ export function createTerrain(positions: THREE.Vector3[], world: RAPIER.World): 
   const terrain: GameObject[] = [];
   
   // Colors for terrain blocks (more vibrant for solid material)
+  /*
   const colors = [0x3355ff, 0x33cc33, 0x9933cc, 0xff9900, 0x00cccc];
   
   positions.forEach(position => {
@@ -84,6 +85,7 @@ export function createTerrain(positions: THREE.Vector3[], world: RAPIER.World): 
     
     terrain.push(terrainBlock);
   });
+  */
   
   return terrain;
 }
