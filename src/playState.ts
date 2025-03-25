@@ -3,13 +3,15 @@ import { Vehicle, GameObject, InputState } from './types';
 import { PhysicsWorld } from './physics';
 import { PlayerTank } from './playerTank';
 import { EnemyTank } from './enemyTank';
-import { createTerrain, createGround, createBoundaryWalls } from './gameObjects';
+import { createBoundaryWalls } from './gameObjects';
 import { FlyCamera } from './flyCamera';
 import { IGameState } from './gameStates';
 import { Radar } from './radar';
 import { GameStateManager } from './gameStateManager';
 import { GameConfig, defaultConfig } from './config';
 import { Projectile, ProjectileSource } from './projectile';
+import { VoxelWorld } from './voxelWorld';
+import { VoxelMaterial } from './voxel';
 
 export class PlayState implements IGameState {
     private gameStateManager: GameStateManager;
@@ -36,6 +38,8 @@ export class PlayState implements IGameState {
 
     // Add a property to track visible enemies for radar
     private previousEnemyCount: number = 0;
+
+    private voxelWorld?: VoxelWorld; // New property for voxel world
 
     constructor(gameStateManager: GameStateManager) {
         // Create scene
@@ -131,48 +135,46 @@ export class PlayState implements IGameState {
         this.scene.add(this.player.mesh);
         this.physicsWorld.addBody(this.player);
 
-        // Create terrain before spawning enemies so we can check for obstacle collisions
+        // Create voxel terrain
         const halfWorldSize = config.worldSize / 2 - 20;
-        
-        // Create terrain
-        const terrainPositions: THREE.Vector3[] = [];
-        for (let i = 0; i < config.obstacleCount; i++) {
-            let x = 0, z = 0;
-            do {
-                x = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
-                z = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
-            } while (Math.sqrt(x * x + z * z) < config.minObstacleDistance);
-            terrainPositions.push(new THREE.Vector3(x, 0, z));
-        }
+        this.voxelWorld = new VoxelWorld(this.scene, this.physicsWorld.world, this.config);
+        this.voxelWorld.generateTerrain(config.voxelChunkSize);
 
-        const terrain = createTerrain(terrainPositions, this.physicsWorld.world);
-        terrain.forEach(obj => {
-            this.scene.add(obj.mesh);
-            if (obj.body) {
-                this.physicsWorld.addBody(obj);
+        // Add the update method to the terrain array so it gets updated each frame
+        this.terrain.push({
+            mesh: null as any,
+            body: null as any,
+            update: (deltaTime: number) => {
+                if (this.voxelWorld) {
+                    this.voxelWorld.update(deltaTime);
+                }
             }
         });
 
-        // Create boundary walls
-        const walls = createBoundaryWalls(halfWorldSize, config.wallHeight, config.wallThickness, this.physicsWorld.world);
-        walls.forEach(wall => {
-            this.scene.add(wall.mesh);
-            this.physicsWorld.addBody(wall);
-        });
+        // Create voxel-based boundary walls
+        const wallThickness = config.wallThickness;
+        const wallHeight = config.wallHeight;
+        for (let x = -halfWorldSize; x <= halfWorldSize; x++) {
+            for (let y = 0; y < wallHeight; y++) {
+                // Add walls along the Z boundaries
+                this.voxelWorld.setVoxel({ x, y, z: -halfWorldSize }, VoxelMaterial.WALL);
+                this.voxelWorld.setVoxel({ x, y, z: halfWorldSize }, VoxelMaterial.WALL);
+            }
+        }
+        for (let z = -halfWorldSize; z <= halfWorldSize; z++) {
+            for (let y = 0; y < wallHeight; y++) {
+                // Add walls along the X boundaries
+                this.voxelWorld.setVoxel({ x: -halfWorldSize, y, z }, VoxelMaterial.WALL);
+                this.voxelWorld.setVoxel({ x: halfWorldSize, y, z }, VoxelMaterial.WALL);
+            }
+        }
 
-        // Create ground
-        const ground = createGround(config.worldSize);
-        this.scene.add(ground.mesh);
-
-        this.terrain = [...terrain, ...walls, ground];
-        
         // Create base number of enemies for first level after terrain is set up
-        // This ensures we can check for obstacle collisions
         for (let i = 0; i < config.baseEnemyCount; i++) {
             let position: THREE.Vector3;
             let attempts = 0;
             const maxAttempts = 100; // Prevent infinite loops
-            
+
             // Try to find a valid spawn position
             do {
                 let x = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
@@ -180,13 +182,12 @@ export class PlayState implements IGameState {
                 position = new THREE.Vector3(x, 0.4, z);
                 attempts++;
             } while (!this.isValidSpawnPosition(position) && attempts < maxAttempts);
-            
+
             // If we couldn't find a valid position after max attempts, skip this enemy
             if (attempts >= maxAttempts) {
                 console.warn(`Could not find valid spawn position for enemy ${i} after ${maxAttempts} attempts`);
                 continue;
             }
-
             const enemy = new EnemyTank(this, position);
             this.enemies.push(enemy);
             this.scene.add(enemy.mesh);
@@ -426,44 +427,93 @@ export class PlayState implements IGameState {
         if (!(projectile instanceof Projectile)) return;
         
         const projectilePos = projectile.body.translation();
-    
+
+        // Check for voxel terrain collisions if voxel world is enabled
+        if (this.voxelWorld && this.config.useVoxelTerrain) {
+            // Create explosion radius for voxel destruction (destroy multiple voxels for more impact)
+            const explosionRadius = 1.5; // Radius in voxel units
+            
+            // Convert projectile position to THREE.Vector3 for voxel world methods
+            const projectileVector = new THREE.Vector3(projectilePos.x, projectilePos.y, projectilePos.z);
+            
+            // Check if projectile hit a voxel
+            const rayResult = this.voxelWorld.raycast(
+                projectileVector.clone().sub(new THREE.Vector3(0, 0, 0.1)), // Small offset to detect collision
+                new THREE.Vector3(0, 0, 1), // Direction doesn't matter for point check
+                explosionRadius // Use radius as max distance
+            );
+            
+            if (rayResult.voxel) {
+                // Create explosion effect
+                this.createExplosion(projectilePos);
+                
+                // Play explosion sound
+                const soundManager = this.gameStateManager.initSoundManager();
+                soundManager.playHit();
+                
+                // Destroy voxels in a sphere around the impact point
+                for (let x = -Math.ceil(explosionRadius); x <= Math.ceil(explosionRadius); x++) {
+                    for (let y = -Math.ceil(explosionRadius); y <= Math.ceil(explosionRadius); y++) {
+                        for (let z = -Math.ceil(explosionRadius); z <= Math.ceil(explosionRadius); z++) {
+                            const checkPos = {
+                                x: rayResult.voxel.x + x,
+                                y: rayResult.voxel.y + y,
+                                z: rayResult.voxel.z + z
+                            };
+                            
+                            // Check if position is within explosion radius
+                            const distance = Math.sqrt(x*x + y*y + z*z);
+                            if (distance <= explosionRadius) {
+                                // Remove the voxel
+                                this.voxelWorld.setVoxel(checkPos, undefined);
+                            }
+                        }
+                    }
+                }
+                
+                // Remove the projectile
+                this.removeProjectile(projectileIndex);
+                return;
+            }
+        }
+
         // Check for enemy collisions if it's a player projectile
         if (projectile.source === ProjectileSource.PLAYER) {
-          for (let j = this.enemies.length - 1; j >= 0; j--) {
-            const enemy = this.enemies[j];
-            if (!enemy.body || !enemy.mesh) continue;
-    
-            const enemyPos = enemy.body.translation();
-            const distance = Math.sqrt(
-              Math.pow(projectilePos.x - enemyPos.x, 2) +
-              Math.pow(projectilePos.y - enemyPos.y, 2) +
-              Math.pow(projectilePos.z - enemyPos.z, 2)
-            );
-    
-            if (distance < 2) {
-              this.handleEnemyHit(j, enemyPos);
-              this.removeProjectile(projectileIndex);
-              break;
+            for (let j = this.enemies.length - 1; j >= 0; j--) {
+                const enemy = this.enemies[j];
+                if (!enemy.body || !enemy.mesh) continue;
+
+                const enemyPos = enemy.body.translation();
+                const distance = Math.sqrt(
+                    Math.pow(projectilePos.x - enemyPos.x, 2) +
+                    Math.pow(projectilePos.y - enemyPos.y, 2) +
+                    Math.pow(projectilePos.z - enemyPos.z, 2)
+                );
+
+                if (distance < 2) {
+                    this.handleEnemyHit(j, enemyPos);
+                    this.removeProjectile(projectileIndex);
+                    break;
+                }
             }
-          }
         } 
         // Check for player collision if it's an enemy projectile
         else if (projectile.source === ProjectileSource.ENEMY) {
-          if (!this.player.body || !this.player.mesh) return;
-          
-          const playerPos = this.player.body.translation();
-          const distance = Math.sqrt(
-            Math.pow(projectilePos.x - playerPos.x, 2) +
-            Math.pow(projectilePos.y - playerPos.y, 2) +
-            Math.pow(projectilePos.z - playerPos.z, 2)
-          );
-          
-          if (distance < 2) {
-            this.handlePlayerHit();
-            this.removeProjectile(projectileIndex);
-          }
+            if (!this.player.body || !this.player.mesh) return;
+            
+            const playerPos = this.player.body.translation();
+            const distance = Math.sqrt(
+                Math.pow(projectilePos.x - playerPos.x, 2) +
+                Math.pow(projectilePos.y - playerPos.y, 2) +
+                Math.pow(projectilePos.z - playerPos.z, 2)
+            );
+            
+            if (distance < 2) {
+                this.handlePlayerHit();
+                this.removeProjectile(projectileIndex);
+            }
         }
-      }
+    }
 
     private handleEnemyHit(enemyIndex: number, enemyPos: { x: number, y: number, z: number }): void {
         const enemy = this.enemies[enemyIndex];
@@ -511,13 +561,26 @@ export class PlayState implements IGameState {
     }
 
     private createExplosion(position: { x: number, y: number, z: number }): void {
-        const particleCount = 20;
+        const particleCount = 30; // Increased from 20
+        
+        // Add an explosion flash light
+        const explosionLight = new THREE.PointLight(0xff8844, 5, 20);
+        explosionLight.position.set(position.x, position.y, position.z);
+        this.scene.add(explosionLight);
+        
+        // Remove the light after a short time
+        setTimeout(() => {
+            this.scene.remove(explosionLight);
+        }, 200);
 
         for (let i = 0; i < particleCount; i++) {
-            const size = 0.2 + Math.random() * 0.3;
+            const size = 0.2 + Math.random() * 0.4; // Slightly larger particles
             const geometry = new THREE.SphereGeometry(size, 8, 8);
+            
+            // More varied colors for a more dramatic explosion
+            const colors = [0xff5500, 0xffaa00, 0xff3300, 0xff8800];
             const material = new THREE.MeshBasicMaterial({
-                color: Math.random() > 0.5 ? 0xff5500 : 0xffaa00,
+                color: colors[Math.floor(Math.random() * colors.length)],
                 transparent: true,
                 opacity: 1.0
             });
@@ -525,16 +588,17 @@ export class PlayState implements IGameState {
             const particle = new THREE.Mesh(geometry, material);
             particle.position.set(position.x, position.y, position.z);
 
+            // More explosive velocity
             const velocity = new THREE.Vector3(
-                Math.random() * 10 - 5,
-                Math.random() * 10,
-                Math.random() * 10 - 5
+                Math.random() * 15 - 7.5,
+                Math.random() * 15,
+                Math.random() * 15 - 7.5
             );
 
             this.scene.add(particle);
 
             const startTime = Date.now();
-            const duration = 500 + Math.random() * 500;
+            const duration = 500 + Math.random() * 700; // Longer duration
 
             const animateParticle = () => {
                 const elapsed = Date.now() - startTime;
@@ -545,15 +609,65 @@ export class PlayState implements IGameState {
                     return;
                 }
 
-                particle.position.x += velocity.x * 0.02;
-                particle.position.y += velocity.y * 0.02 - 0.1 * progress;
-                particle.position.z += velocity.z * 0.02;
+                particle.position.x += velocity.x * 0.025;
+                particle.position.y += velocity.y * 0.025 - 0.12 * progress;
+                particle.position.z += velocity.z * 0.025;
+                
+                // Shrink particles as they fade
+                particle.scale.set(1 - progress, 1 - progress, 1 - progress);
                 material.opacity = 1 - progress;
 
                 requestAnimationFrame(animateParticle);
             };
 
             animateParticle();
+        }
+        
+        // Add smoke particles that linger longer
+        for (let i = 0; i < 10; i++) {
+            const size = 0.5 + Math.random() * 0.5;
+            const geometry = new THREE.SphereGeometry(size, 8, 8);
+            const material = new THREE.MeshBasicMaterial({
+                color: 0x222222,
+                transparent: true,
+                opacity: 0.6
+            });
+
+            const smoke = new THREE.Mesh(geometry, material);
+            smoke.position.set(
+                position.x + (Math.random() * 2 - 1),
+                position.y + (Math.random() * 2),
+                position.z + (Math.random() * 2 - 1)
+            );
+
+            this.scene.add(smoke);
+
+            const startTime = Date.now();
+            const duration = 1500 + Math.random() * 1000; // Smoke lasts longer
+
+            const animateSmoke = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = elapsed / duration;
+
+                if (progress >= 1) {
+                    this.scene.remove(smoke);
+                    return;
+                }
+
+                // Smoke rises slowly
+                smoke.position.y += 0.05;
+                
+                // Smoke expands as it rises
+                const scale = 1 + progress;
+                smoke.scale.set(scale, scale, scale);
+                
+                // Smoke fades out
+                material.opacity = 0.6 * (1 - progress);
+
+                requestAnimationFrame(animateSmoke);
+            };
+
+            animateSmoke();
         }
     }
 
