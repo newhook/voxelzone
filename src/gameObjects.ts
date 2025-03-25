@@ -3,6 +3,91 @@ import { GameObject } from './types';
 import { createObstacleBody } from './physics';
 import RAPIER from '@dimforge/rapier3d';
 
+// Create terrain blocks (obstacles)
+export function createTerrain(positions: THREE.Vector3[], world: RAPIER.World): GameObject[] {
+  const terrain: GameObject[] = [];
+  
+  // Colors for terrain blocks (more vibrant for solid material)
+  const colors = [0x3355ff, 0x33cc33, 0x9933cc, 0xff9900, 0x00cccc];
+  
+  positions.forEach(position => {
+    // Random size for each obstacle
+    const size = 3 + Math.random() * 8; // Between 3 and 11 units
+    
+    // Random shape - either box or cylinder
+    let geometry, body;
+    let height: number;
+    const shapeType = Math.random() > 0.7 ? 'cylinder' : 'box';
+    
+    if (shapeType === 'box') {
+      // Box with slightly random proportions
+      const width = size * (0.8 + Math.random() * 0.4);
+      height = size * (0.8 + Math.random() * 0.4);
+      const depth = size * (0.8 + Math.random() * 0.4);
+      
+      geometry = new THREE.BoxGeometry(width, height, depth);
+      
+      // Create the box collider
+      body = createObstacleBody(
+        { width, height, depth },
+        // Position the obstacle so its bottom is at ground level (y=0)
+        { x: position.x, y: height / 2, z: position.z },
+        world,
+        0 // Zero mass for static obstacle
+      );
+    } else {
+      // Cylinder
+      const radius = size / 2;
+      height = size * (0.8 + Math.random() * 0.4);
+      geometry = new THREE.CylinderGeometry(radius, radius, height, 16); // Increased segments for smoother look
+      
+      // For cylinders, use a cylinder collider (approximated as a box for now)
+      body = createObstacleBody(
+        { width: radius * 2, height: height, depth: radius * 2 },
+        // Position the obstacle so its bottom is at ground level (y=0)
+        { x: position.x, y: height / 2, z: position.z },
+        world,
+        0 // Zero mass for static obstacle
+      );
+    }
+    
+    // Random rotation for variety - only for visual mesh, not physics
+    const rotation = Math.random() * Math.PI * 2;
+    
+    // Random color from the palette
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const material = new THREE.MeshStandardMaterial({ 
+      color: color, 
+      wireframe: false, 
+      metalness: 0.3,
+      roughness: 0.7
+    });
+    
+    const mesh = new THREE.Mesh(geometry, material);
+    
+    // Position the visual mesh to match the physics body position
+    // We set the physics body's y to height/2 above, so we need to do the same here
+    mesh.position.set(position.x, height / 2, position.z);
+    mesh.rotation.y = rotation;
+    
+    // Link the mesh to the physics body for debugging
+    if (body) {
+      body.userData = { mesh }; 
+    }
+    
+    // Create terrain object
+    const terrainBlock: GameObject = {
+      mesh,
+      body,
+      update: () => {} // Static objects don't need updates
+    };
+    
+    terrain.push(terrainBlock);
+  });
+  
+  return terrain;
+}
+
 // Create the game world boundary walls
 export function createBoundaryWalls(size: number, wallHeight: number, wallThickness: number, world: RAPIER.World): GameObject[] {
   const walls: GameObject[] = [];

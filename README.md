@@ -1,10 +1,10 @@
-# Battlezone
+# Voxelzone
 
-A modern remake of the classic Atari Battlezone arcade game, built with Three.js and TypeScript.
+A modern remake of the classic Atari Voxelzone arcade game, built with Three.js and TypeScript.
 
 ## Description
 
-Battlezone is a first-person tank combat game where players navigate a virtual battlefield, destroying enemy tanks while avoiding their attacks. This remake preserves the original's vector graphics aesthetic while adding modern rendering techniques and gameplay improvements.
+Voxelzone is a first-person tank combat game where players navigate a virtual battlefield, destroying enemy tanks while avoiding their attacks. This remake preserves the original's vector graphics aesthetic while adding modern rendering techniques and gameplay improvements.
 
 ## Features
 
@@ -78,5 +78,5 @@ This project is licensed under the ISC License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- Original Battlezone game created by Atari in 1980
+- Original Voxelzone game created by Atari in 1980
 - Inspired by the vector graphics style of early arcade games

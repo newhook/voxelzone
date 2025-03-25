@@ -12,6 +12,9 @@ export enum VoxelMaterial {
   WOOD = 5,
   LEAVES = 6,
   WALL = 7,
+  BRICK = 8,
+  CONCRETE = 9,
+  METAL = 10,
 }
 
 // Properties for each voxel type
@@ -92,6 +95,33 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     restitution: 0.1,
   },
   [VoxelMaterial.WALL]: {
+    color: 0x4a4a4a,
+    transparent: false,
+    solid: true,
+    breakable: false,
+    gravity: false,
+    friction: 0.9,
+    restitution: 0.0,
+  },
+  [VoxelMaterial.BRICK]: {
+    color: 0x4a4a4a,
+    transparent: false,
+    solid: true,
+    breakable: false,
+    gravity: false,
+    friction: 0.9,
+    restitution: 0.0,
+  },
+  [VoxelMaterial.CONCRETE]: {
+    color: 0x4a4a4a,
+    transparent: false,
+    solid: true,
+    breakable: false,
+    gravity: false,
+    friction: 0.9,
+    restitution: 0.0,
+  },
+  [VoxelMaterial.METAL]: {
     color: 0x4a4a4a,
     transparent: false,
     solid: true,

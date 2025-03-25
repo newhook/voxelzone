@@ -202,7 +202,7 @@ export class MarqueeState implements IGameState {
         const titleScreen = document.createElement('div');
         titleScreen.id = 'title-screen';
         titleScreen.innerHTML = `
-    <div class="title">BATTLEZONE</div>
+    <div class="title">Voxelzone</div>
     <div class="press-start">PRESS SPACE TO START</div>
     <div class="credits">MOVEMENT: WASD/ARROWS<br>FIRE: SPACE/MOUSE<br>TURRET: Q/E</div>
   `;
