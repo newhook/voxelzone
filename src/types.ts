@@ -44,7 +44,6 @@ export interface InputState {
   left: boolean;
   right: boolean;
   fire: boolean;
-  toggleFlyCamera: boolean;
   wireframeToggle: boolean;
   turretLeft: boolean;  // For Q key
   turretRight: boolean; // For E key

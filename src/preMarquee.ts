@@ -32,7 +32,7 @@ export class PreMarquee implements IGameState {
         welcomeElement.style.fontFamily = 'monospace';
         welcomeElement.style.fontSize = '24px';
         welcomeElement.style.textAlign = 'center';
-        welcomeElement.innerHTML = 'Welcome to Battlezone!<br>Click to Start';
+        welcomeElement.innerHTML = 'Welcome to Voxelzone!<br>Click to Start';
         document.body.appendChild(welcomeElement);
 
         // Start AudioContext and load marquee music on user interaction
