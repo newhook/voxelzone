@@ -104,31 +104,31 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     restitution: 0.0,
   },
   [VoxelMaterial.BRICK]: {
-    color: 0x4a4a4a,
+    color: 0xa52a2a, // Brick red
     transparent: false,
     solid: true,
-    breakable: false,
+    breakable: true,
     gravity: false,
-    friction: 0.9,
-    restitution: 0.0,
+    friction: 0.85,
+    restitution: 0.05,
   },
   [VoxelMaterial.CONCRETE]: {
-    color: 0x4a4a4a,
+    color: 0xc0c0c0, // Light gray
     transparent: false,
     solid: true,
     breakable: false,
     gravity: false,
-    friction: 0.9,
-    restitution: 0.0,
+    friction: 0.95,
+    restitution: 0.02,
   },
   [VoxelMaterial.METAL]: {
-    color: 0x4a4a4a,
+    color: 0x808080, // Gray with metallic appearance
     transparent: false,
     solid: true,
     breakable: false,
     gravity: false,
-    friction: 0.9,
-    restitution: 0.0,
+    friction: 0.7,
+    restitution: 0.3, // More bouncy than other materials
   },
 };
 
