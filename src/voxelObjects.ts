@@ -364,3 +364,229 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, y: number, z: 
     voxelWorld.setVoxel({ x: innerEntranceX, y: y + 1, z: innerEntranceZ }, undefined);
     voxelWorld.setVoxel({ x: innerEntranceX, y: y + 2, z: innerEntranceZ }, undefined);
 }
+
+/**
+ * Creates a tree at the specified position
+ */
+export function createTree(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+    // Randomize tree height
+    const trunkHeight = 4 + Math.floor(Math.random() * 3);
+    const leafRadius = 2 + Math.floor(Math.random() * 2);
+    
+    // Create trunk
+    for (let dy = 0; dy < trunkHeight; dy++) {
+        voxelWorld.setVoxel({
+            x,
+            y: y + dy + 1,
+            z
+        }, VoxelMaterial.WOOD);
+    }
+    
+    // Create leaves in a roughly spherical shape
+    for (let dx = -leafRadius; dx <= leafRadius; dx++) {
+        for (let dy = -1; dy <= leafRadius + 1; dy++) {
+            for (let dz = -leafRadius; dz <= leafRadius; dz++) {
+                // Create a spherical-ish shape by checking distance from center
+                const distanceSquared = dx * dx + dy * dy + dz * dz;
+                if (distanceSquared <= leafRadius * leafRadius + 1) {
+                    // Place leaf block
+                    voxelWorld.setVoxel({
+                        x: x + dx,
+                        y: y + trunkHeight + dy,
+                        z: z + dz
+                    }, VoxelMaterial.LEAVES);
+                }
+            }
+        }
+    }
+    
+    // Ensure trunk can still be seen by removing some leaves in the center
+    voxelWorld.setVoxel({
+        x,
+        y: y + trunkHeight,
+        z
+    }, VoxelMaterial.WOOD);
+}
+
+/**
+ * Creates a pine tree (conical) at the specified position
+ */
+export function createPineTree(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+    // Randomize tree height
+    const trunkHeight = 5 + Math.floor(Math.random() * 4);
+    const baseLeafRadius = 3;
+    
+    // Create trunk
+    for (let dy = 0; dy < trunkHeight; dy++) {
+        voxelWorld.setVoxel({
+            x,
+            y: y + dy + 1,
+            z
+        }, VoxelMaterial.WOOD);
+    }
+    
+    // Create a conical leaf arrangement
+    for (let dy = 0; dy < trunkHeight - 1; dy++) {
+        // Leaves get smaller as we go up (conical shape)
+        const layerRadius = Math.max(1, Math.floor(baseLeafRadius * (1 - dy / trunkHeight)));
+        
+        // Only place leaves on the upper two-thirds of the tree
+        if (dy > trunkHeight / 3) {
+            for (let dx = -layerRadius; dx <= layerRadius; dx++) {
+                for (let dz = -layerRadius; dz <= layerRadius; dz++) {
+                    // Create a circular cross-section by checking distance from center
+                    const distanceSquared = dx * dx + dz * dz;
+                    if (distanceSquared <= layerRadius * layerRadius) {
+                        voxelWorld.setVoxel({
+                            x: x + dx,
+                            y: y + trunkHeight - dy,
+                            z: z + dz
+                        }, VoxelMaterial.LEAVES);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Add the top of the tree (a single leaf block)
+    voxelWorld.setVoxel({
+        x,
+        y: y + trunkHeight + 1,
+        z
+    }, VoxelMaterial.LEAVES);
+}
+
+/**
+ * Creates a bush at the specified position
+ */
+export function createBush(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+    // Random bush size
+    const radius = 1 + Math.floor(Math.random() * 2);
+    
+    // Create a roughly spherical bush
+    for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = 0; dy <= radius; dy++) {
+            for (let dz = -radius; dz <= radius; dz++) {
+                // Spherical shape
+                const distanceSquared = dx * dx + dy * dy + dz * dz;
+                if (distanceSquared <= radius * radius) {
+                    // Random gaps to make it look less uniform
+                    if (Math.random() > 0.3) {
+                        voxelWorld.setVoxel({
+                            x: x + dx,
+                            y: y + dy + 1,
+                            z: z + dz
+                        }, VoxelMaterial.LEAVES);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Creates a rock formation at the specified position
+ */
+export function createRockFormation(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+    // Random rock size
+    const size = 1 + Math.floor(Math.random() * 3);
+    
+    // Create a roughly rounded rock formation
+    for (let dx = -size; dx <= size; dx++) {
+        for (let dy = 0; dy <= size; dy++) {
+            for (let dz = -size; dz <= size; dz++) {
+                // Make a rounded shape by checking distance from center
+                const distanceSquared = dx * dx + dy * dy + dz * dz;
+                if (distanceSquared <= size * size + 1) {
+                    // Add some randomness to make it look more natural
+                    if (Math.random() > 0.2) {
+                        voxelWorld.setVoxel({
+                            x: x + dx,
+                            y: y + dy + 1,
+                            z: z + dz
+                        }, VoxelMaterial.STONE);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Creates a cactus at the specified position
+ */
+export function createCactus(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+    // Create the main stem
+    const height = 3 + Math.floor(Math.random() * 3);
+    
+    for (let dy = 0; dy < height; dy++) {
+        voxelWorld.setVoxel({
+            x,
+            y: y + dy + 1,
+            z
+        }, VoxelMaterial.GRASS); // Using green material for cactus
+    }
+    
+    // Maybe add a branch or two
+    if (Math.random() > 0.4) {
+        const branchHeight = 1 + Math.floor(Math.random() * (height - 2));
+        const branchDirection = Math.floor(Math.random() * 4);
+        let branchX = x;
+        let branchZ = z;
+        
+        switch (branchDirection) {
+            case 0: branchX += 1; break;
+            case 1: branchX -= 1; break;
+            case 2: branchZ += 1; break;
+            case 3: branchZ -= 1; break;
+        }
+        
+        // Create the branch
+        for (let dy = 0; dy < 2; dy++) {
+            voxelWorld.setVoxel({
+                x: branchX,
+                y: y + branchHeight + dy + 1,
+                z: branchZ
+            }, VoxelMaterial.GRASS);
+        }
+    }
+}
+
+/**
+ * Creates a small pond of water at the specified position
+ */
+export function createPond(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+    // Create a small pond with random shape
+    const radius = 2 + Math.floor(Math.random() * 3);
+    
+    // Dig out the pond and fill with water
+    for (let dx = -radius; dx <= radius; dx++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+            // Create a somewhat circular pond
+            const distanceSquared = dx * dx + dz * dz;
+            if (distanceSquared <= radius * radius) {
+                // Clear existing blocks and place water
+                voxelWorld.setVoxel({
+                    x: x + dx,
+                    y: y + 1,
+                    z: z + dz
+                }, undefined);
+                
+                voxelWorld.setVoxel({
+                    x: x + dx,
+                    y: y,
+                    z: z + dz
+                }, VoxelMaterial.WATER);
+                
+                // Add sand around the edges
+                if (distanceSquared > (radius - 1) * (radius - 1)) {
+                    voxelWorld.setVoxel({
+                        x: x + dx,
+                        y: y + 1,
+                        z: z + dz
+                    }, VoxelMaterial.SAND);
+                }
+            }
+        }
+    }
+}

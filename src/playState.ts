@@ -11,7 +11,7 @@ import { GameConfig, defaultConfig } from './config';
 import { Projectile, ProjectileSource } from './projectile';
 import { VoxelWorld } from './voxelWorld';
 import { createTerrain, createGround, createBoundaryWalls } from './gameObjects';
-import { createBarrier, createBuilding, createFortress } from './voxelObjects';
+import { createBarrier, createBuilding, createFortress, createTree, createBush, createPond, createPineTree, createCactus, createRockFormation } from './voxelObjects';
 
 export class PlayState implements IGameState {
   private gameStateManager: GameStateManager;
@@ -1351,6 +1351,71 @@ export class PlayState implements IGameState {
       const z = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
 
       createBarrier(this.voxelWorld, x, 0.4, z);
+    }
+
+    // Add trees to the world (both regular and pine trees)
+    const treeCount = 25;
+    for (let i = 0; i < treeCount; i++) {
+      const x = Math.floor((Math.random() * (halfWorldSize * 1.7)) - (halfWorldSize * 0.85));
+      const z = Math.floor((Math.random() * (halfWorldSize * 1.7)) - (halfWorldSize * 0.85));
+      
+      // Check if position is far enough from player spawn (at least 20 units)
+      const distanceFromOrigin = Math.sqrt(x * x + z * z);
+      if (distanceFromOrigin < 20) continue;
+      
+      // Decide between regular and pine trees
+      if (Math.random() > 0.5) {
+        createTree(this.voxelWorld, x, 0, z);
+      } else {
+        createPineTree(this.voxelWorld, x, 0, z);
+      }
+    }
+    
+    // Add bushes (more numerous but smaller)
+    const bushCount = 40;
+    for (let i = 0; i < bushCount; i++) {
+      const x = Math.floor((Math.random() * (halfWorldSize * 1.9)) - (halfWorldSize * 0.95));
+      const z = Math.floor((Math.random() * (halfWorldSize * 1.9)) - (halfWorldSize * 0.95));
+      
+      createBush(this.voxelWorld, x, 0, z);
+    }
+    
+    // Add rock formations
+    const rockCount = 15;
+    for (let i = 0; i < rockCount; i++) {
+      const x = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
+      const z = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
+      
+      createRockFormation(this.voxelWorld, x, 0, z);
+    }
+    
+    // Add a few cacti in certain areas (to create desert-like regions)
+    const cactusCount = 10;
+    const desertCenterX = halfWorldSize * 0.6;
+    const desertCenterZ = -halfWorldSize * 0.6;
+    
+    for (let i = 0; i < cactusCount; i++) {
+      // Place cacti in a desert region (roughly centered at desertCenter)
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * 50; // The "desert" radius
+      
+      const x = Math.floor(desertCenterX + Math.cos(angle) * distance);
+      const z = Math.floor(desertCenterZ + Math.sin(angle) * distance);
+      
+      createCactus(this.voxelWorld, x, 0, z);
+    }
+    
+    // Add a few ponds
+    const pondCount = 5;
+    for (let i = 0; i < pondCount; i++) {
+      const x = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
+      const z = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
+      
+      // Ensure ponds aren't too close to player spawn
+      const distanceFromOrigin = Math.sqrt(x * x + z * z);
+      if (distanceFromOrigin < 30) continue;
+      
+      createPond(this.voxelWorld, x, 0, z);
     }
 
     // Create a larger central structure/fortress
