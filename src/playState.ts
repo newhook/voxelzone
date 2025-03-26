@@ -53,6 +53,7 @@ export class PlayState implements IGameState {
 
     this.gameStateManager = gameStateManager;
     this.physicsWorld = new PhysicsWorld(this.config);
+    this.voxelWorld = new VoxelWorld(this.scene, this.physicsWorld.world, this.config);
     this.initializeGameObjects(this.config);
 
     // Set up camera with increased far plane and narrower FOV for first person view
@@ -165,8 +166,6 @@ export class PlayState implements IGameState {
 
     this.terrain = [...terrain, ...walls, ground];
 
-    this.voxelWorld = new VoxelWorld(this.scene, this.physicsWorld.world, this.config);
-
     // Instead of generating voxel terrain, create voxel structures on the regular terrain
     this.createVoxelStructures(halfWorldSize);
 
@@ -177,7 +176,8 @@ export class PlayState implements IGameState {
     this.physicsWorld.addBody(this.player);
 
     // Create base number of enemies for first level after terrain is set up
-    for (let i = 0; i < config.baseEnemyCount; i++) {
+    // for (let i = 0; i < config.baseEnemyCount; i++) {
+    for (let i = 0; i < 1; i++) {
       // Try to find a valid spawn position
       let x = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
       let z = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
@@ -1358,11 +1358,11 @@ export class PlayState implements IGameState {
     for (let i = 0; i < treeCount; i++) {
       const x = Math.floor((Math.random() * (halfWorldSize * 1.7)) - (halfWorldSize * 0.85));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.7)) - (halfWorldSize * 0.85));
-      
+
       // Check if position is far enough from player spawn (at least 20 units)
       const distanceFromOrigin = Math.sqrt(x * x + z * z);
       if (distanceFromOrigin < 20) continue;
-      
+
       // Decide between regular and pine trees
       if (Math.random() > 0.5) {
         createTree(this.voxelWorld, x, 0, z);
@@ -1370,51 +1370,51 @@ export class PlayState implements IGameState {
         createPineTree(this.voxelWorld, x, 0, z);
       }
     }
-    
+
     // Add bushes (more numerous but smaller)
     const bushCount = 40;
     for (let i = 0; i < bushCount; i++) {
       const x = Math.floor((Math.random() * (halfWorldSize * 1.9)) - (halfWorldSize * 0.95));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.9)) - (halfWorldSize * 0.95));
-      
+
       createBush(this.voxelWorld, x, 0, z);
     }
-    
+
     // Add rock formations
     const rockCount = 15;
     for (let i = 0; i < rockCount; i++) {
       const x = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
-      
+
       createRockFormation(this.voxelWorld, x, 0, z);
     }
-    
+
     // Add a few cacti in certain areas (to create desert-like regions)
     const cactusCount = 10;
     const desertCenterX = halfWorldSize * 0.6;
     const desertCenterZ = -halfWorldSize * 0.6;
-    
+
     for (let i = 0; i < cactusCount; i++) {
       // Place cacti in a desert region (roughly centered at desertCenter)
       const angle = Math.random() * Math.PI * 2;
       const distance = Math.random() * 50; // The "desert" radius
-      
+
       const x = Math.floor(desertCenterX + Math.cos(angle) * distance);
       const z = Math.floor(desertCenterZ + Math.sin(angle) * distance);
-      
+
       createCactus(this.voxelWorld, x, 0, z);
     }
-    
+
     // Add a few ponds
     const pondCount = 5;
     for (let i = 0; i < pondCount; i++) {
       const x = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
-      
+
       // Ensure ponds aren't too close to player spawn
       const distanceFromOrigin = Math.sqrt(x * x + z * z);
       if (distanceFromOrigin < 30) continue;
-      
+
       createPond(this.voxelWorld, x, 0, z);
     }
 
