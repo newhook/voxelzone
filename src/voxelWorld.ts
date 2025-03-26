@@ -500,4 +500,18 @@ export class VoxelWorld {
     
     return false;
   }
+
+  // Find the highest voxel at the given X,Z position - make public so voxel objects can use it
+  findSurfaceHeight(x: number, z: number): number {
+    let y = 64; // Search from a high position down
+    while (y >= 0) {
+      const voxelPos: VoxelCoord = { x, y, z };
+      const voxel = this.getVoxel(voxelPos);
+      if (voxel !== undefined) {
+        return y + 1; // Return one above the found voxel
+      }
+      y--;
+    }
+    return 0; // Default ground level if no terrain found
+  }
 }

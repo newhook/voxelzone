@@ -369,6 +369,9 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, y: number, z: 
  * Creates a tree at the specified position
  */
 export function createTree(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+    // Find proper ground height
+    const groundY = voxelWorld.findSurfaceHeight(x, z);
+    
     // Randomize tree height
     const trunkHeight = 4 + Math.floor(Math.random() * 3);
     const leafRadius = 2 + Math.floor(Math.random() * 2);
@@ -377,7 +380,7 @@ export function createTree(voxelWorld: VoxelWorld, x: number, y: number, z: numb
     for (let dy = 0; dy < trunkHeight; dy++) {
         voxelWorld.setVoxel({
             x,
-            y: y + dy + 1,
+            y: groundY + dy,
             z
         }, VoxelMaterial.WOOD);
     }
@@ -392,7 +395,7 @@ export function createTree(voxelWorld: VoxelWorld, x: number, y: number, z: numb
                     // Place leaf block
                     voxelWorld.setVoxel({
                         x: x + dx,
-                        y: y + trunkHeight + dy,
+                        y: groundY + trunkHeight + dy,
                         z: z + dz
                     }, VoxelMaterial.LEAVES);
                 }
@@ -403,7 +406,7 @@ export function createTree(voxelWorld: VoxelWorld, x: number, y: number, z: numb
     // Ensure trunk can still be seen by removing some leaves in the center
     voxelWorld.setVoxel({
         x,
-        y: y + trunkHeight,
+        y: groundY + trunkHeight,
         z
     }, VoxelMaterial.WOOD);
 }
@@ -412,6 +415,9 @@ export function createTree(voxelWorld: VoxelWorld, x: number, y: number, z: numb
  * Creates a pine tree (conical) at the specified position
  */
 export function createPineTree(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+    // Find proper ground height
+    const groundY = voxelWorld.findSurfaceHeight(x, z);
+    
     // Randomize tree height
     const trunkHeight = 5 + Math.floor(Math.random() * 4);
     const baseLeafRadius = 3;
@@ -420,7 +426,7 @@ export function createPineTree(voxelWorld: VoxelWorld, x: number, y: number, z: 
     for (let dy = 0; dy < trunkHeight; dy++) {
         voxelWorld.setVoxel({
             x,
-            y: y + dy + 1,
+            y: groundY + dy,
             z
         }, VoxelMaterial.WOOD);
     }
@@ -439,7 +445,7 @@ export function createPineTree(voxelWorld: VoxelWorld, x: number, y: number, z: 
                     if (distanceSquared <= layerRadius * layerRadius) {
                         voxelWorld.setVoxel({
                             x: x + dx,
-                            y: y + trunkHeight - dy,
+                            y: groundY + trunkHeight - dy,
                             z: z + dz
                         }, VoxelMaterial.LEAVES);
                     }
@@ -451,7 +457,7 @@ export function createPineTree(voxelWorld: VoxelWorld, x: number, y: number, z: 
     // Add the top of the tree (a single leaf block)
     voxelWorld.setVoxel({
         x,
-        y: y + trunkHeight + 1,
+        y: groundY + trunkHeight + 1,
         z
     }, VoxelMaterial.LEAVES);
 }
@@ -460,6 +466,9 @@ export function createPineTree(voxelWorld: VoxelWorld, x: number, y: number, z: 
  * Creates a bush at the specified position
  */
 export function createBush(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+    // Find proper ground height
+    const groundY = voxelWorld.findSurfaceHeight(x, z);
+    
     // Random bush size
     const radius = 1 + Math.floor(Math.random() * 2);
     
@@ -474,7 +483,7 @@ export function createBush(voxelWorld: VoxelWorld, x: number, y: number, z: numb
                     if (Math.random() > 0.3) {
                         voxelWorld.setVoxel({
                             x: x + dx,
-                            y: y + dy + 1,
+                            y: groundY + dy,
                             z: z + dz
                         }, VoxelMaterial.LEAVES);
                     }
@@ -488,6 +497,9 @@ export function createBush(voxelWorld: VoxelWorld, x: number, y: number, z: numb
  * Creates a rock formation at the specified position
  */
 export function createRockFormation(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+    // Find proper ground height
+    const groundY = voxelWorld.findSurfaceHeight(x, z);
+    
     // Random rock size
     const size = 1 + Math.floor(Math.random() * 3);
     
@@ -502,7 +514,7 @@ export function createRockFormation(voxelWorld: VoxelWorld, x: number, y: number
                     if (Math.random() > 0.2) {
                         voxelWorld.setVoxel({
                             x: x + dx,
-                            y: y + dy + 1,
+                            y: groundY + dy,
                             z: z + dz
                         }, VoxelMaterial.STONE);
                     }
@@ -516,13 +528,16 @@ export function createRockFormation(voxelWorld: VoxelWorld, x: number, y: number
  * Creates a cactus at the specified position
  */
 export function createCactus(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+    // Find proper ground height
+    const groundY = voxelWorld.findSurfaceHeight(x, z);
+    
     // Create the main stem
     const height = 3 + Math.floor(Math.random() * 3);
     
     for (let dy = 0; dy < height; dy++) {
         voxelWorld.setVoxel({
             x,
-            y: y + dy + 1,
+            y: groundY + dy,
             z
         }, VoxelMaterial.GRASS); // Using green material for cactus
     }
@@ -545,7 +560,7 @@ export function createCactus(voxelWorld: VoxelWorld, x: number, y: number, z: nu
         for (let dy = 0; dy < 2; dy++) {
             voxelWorld.setVoxel({
                 x: branchX,
-                y: y + branchHeight + dy + 1,
+                y: groundY + branchHeight + dy,
                 z: branchZ
             }, VoxelMaterial.GRASS);
         }
@@ -556,6 +571,9 @@ export function createCactus(voxelWorld: VoxelWorld, x: number, y: number, z: nu
  * Creates a small pond of water at the specified position
  */
 export function createPond(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+    // Find proper ground height
+    const groundY = voxelWorld.findSurfaceHeight(x, z);
+    
     // Create a small pond with random shape
     const radius = 2 + Math.floor(Math.random() * 3);
     
@@ -568,13 +586,13 @@ export function createPond(voxelWorld: VoxelWorld, x: number, y: number, z: numb
                 // Clear existing blocks and place water
                 voxelWorld.setVoxel({
                     x: x + dx,
-                    y: y + 1,
+                    y: groundY,
                     z: z + dz
                 }, undefined);
                 
                 voxelWorld.setVoxel({
                     x: x + dx,
-                    y: y,
+                    y: groundY - 1,
                     z: z + dz
                 }, VoxelMaterial.WATER);
                 
@@ -582,7 +600,7 @@ export function createPond(voxelWorld: VoxelWorld, x: number, y: number, z: numb
                 if (distanceSquared > (radius - 1) * (radius - 1)) {
                     voxelWorld.setVoxel({
                         x: x + dx,
-                        y: y + 1,
+                        y: groundY,
                         z: z + dz
                     }, VoxelMaterial.SAND);
                 }
