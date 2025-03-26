@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d';
 import { GameObject } from './types';
 import { PlayState } from './playState';
+import { VoxelCoord, voxelProperties } from './voxel';
 
 export enum ProjectileSource {
   PLAYER,
@@ -156,6 +157,119 @@ export class Projectile implements GameObject {
   }
   
   update(): void {
-    // Physics world handles updates
+    // Check if the projectile is still active
+    if (!this.body || !this.mesh) return;
+
+    // Get current projectile position from the physics body
+    const projectilePos = this.body.translation();
+    const projectileVector = new THREE.Vector3(projectilePos.x, projectilePos.y, projectilePos.z);
+
+    // Check if projectile hit a voxel
+    const rayResult = this.state.voxelWorld.raycast(
+      projectileVector,
+      // Use projectile's velocity as direction for the ray
+      new THREE.Vector3(
+        this.body.linvel().x, 
+        this.body.linvel().y, 
+        this.body.linvel().z
+      ).normalize(),
+      0.5 // Short distance check
+    );
+
+    // If we hit a voxel, destroy the projectile and the voxel
+    if (rayResult.voxel) {
+      // Create explosion effect
+      this.createExplosionEffect(projectileVector);
+
+      // Destroy voxels in a small radius
+      this.destroyVoxelsInRadius(rayResult.voxel, 1.5);
+
+      // Destroy the projectile
+      this.destroy();
+    }
+  }
+
+  private createExplosionEffect(position: THREE.Vector3): void {
+    // Create particles for explosion
+    const particleCount = 10;
+    
+    for (let i = 0; i < particleCount; i++) {
+      const size = 0.2 + Math.random() * 0.3;
+      const geometry = new THREE.SphereGeometry(size, 8, 8);
+      const material = new THREE.MeshBasicMaterial({
+        color: this.source === ProjectileSource.PLAYER ? 0xffff00 : 0xff0000,
+        transparent: true,
+        opacity: 0.7
+      });
+      
+      const particle = new THREE.Mesh(geometry, material);
+      particle.position.copy(position);
+      
+      // Add particle to scene
+      this.state.scene.add(particle);
+      
+      // Random direction
+      const direction = new THREE.Vector3(
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1
+      ).normalize();
+      
+      // Animate the particle
+      const startTime = Date.now();
+      const duration = 300 + Math.random() * 200;
+      const speed = 5 + Math.random() * 5;
+      
+      const animateParticle = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = elapsed / duration;
+        
+        if (progress >= 1) {
+          this.state.scene.remove(particle);
+          return;
+        }
+        
+        // Move outward
+        particle.position.add(direction.clone().multiplyScalar(speed * 0.016)); // Roughly time-based movement
+        
+        // Fade out
+        material.opacity = 0.7 * (1 - progress);
+        
+        requestAnimationFrame(animateParticle);
+      };
+      
+      animateParticle();
+    }
+    
+    // Play explosion sound if available
+    if (this.state.gameStateManager && this.state.gameStateManager.soundManager) {
+      this.state.gameStateManager.soundManager.playHit();
+    }
+  }
+
+  private destroyVoxelsInRadius(center: VoxelCoord, radius: number): void {
+    for (let x = -Math.ceil(radius); x <= Math.ceil(radius); x++) {
+      for (let y = -Math.ceil(radius); y <= Math.ceil(radius); y++) {
+        for (let z = -Math.ceil(radius); z <= Math.ceil(radius); z++) {
+          const checkPos = {
+            x: center.x + x,
+            y: center.y + y,
+            z: center.z + z
+          };
+          
+          // Check if position is within explosion radius
+          const distance = Math.sqrt(x * x + y * y + z * z);
+          if (distance <= radius) {
+            // Get the voxel at this position
+            const voxel = this.state.voxelWorld.getVoxel(checkPos);
+            
+            // Only destroy the voxel if it exists and is breakable
+            if (voxel !== undefined && voxelProperties[voxel].breakable) {
+              this.state.voxelWorld.setVoxel(checkPos, undefined);
+            }
+          }
+        }
+      }
+    }
   }
 }

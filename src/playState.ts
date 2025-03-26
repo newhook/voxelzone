@@ -39,7 +39,7 @@ export class PlayState implements IGameState {
   // Add a property to track visible enemies for radar
   private previousEnemyCount: number = 0;
 
-  private voxelWorld: VoxelWorld; // New property for voxel world
+  public voxelWorld: VoxelWorld; // New property for voxel world
 
   constructor(gameStateManager: GameStateManager) {
     // Create scene

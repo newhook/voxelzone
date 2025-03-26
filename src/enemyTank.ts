@@ -114,8 +114,19 @@ export class EnemyTank extends Tank {
 
     // Check for obstacles using raycasting
     const distanceToPlayer = tankPosition.distanceTo(playerPosition);
+    
+    // First, check voxel collisions using the voxel world raycast function
+    const tankEyePosition = tankPosition.clone().add(new THREE.Vector3(0, 0.5, 0)); // Slightly raise origin
+    const voxelRaycastResult = this.state.voxelWorld.raycast(tankEyePosition, directionToPlayer, distanceToPlayer);
+    
+    // If we hit a voxel before reaching the player, line of sight is blocked
+    if (voxelRaycastResult.voxel !== null) {
+      return false;
+    }
+    
+    // If no voxels are blocking, perform standard THREE.js raycasting for other objects
     const ray = new THREE.Raycaster(
-      tankPosition.clone().add(new THREE.Vector3(0, 0.5, 0)), // Slightly raise origin to avoid ground
+      tankEyePosition,
       directionToPlayer,
       0,
       distanceToPlayer
