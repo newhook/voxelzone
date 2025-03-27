@@ -111,6 +111,9 @@ export class VoxelWorld {
     const localPos = this.voxelToChunkLocal(voxelPos);
     const key = getVoxelKey(localPos);
 
+    // Check if we're removing a voxel
+    const isRemoving = material === undefined && chunk.voxels.has(key);
+    
     // If material is undefined, remove the voxel
     if (material === undefined) {
       chunk.voxels.delete(key);
@@ -133,6 +136,14 @@ export class VoxelWorld {
       localPos.y === 0 || localPos.y === CHUNK_SIZE - 1 ||
       localPos.z === 0 || localPos.z === CHUNK_SIZE - 1) {
       this.markNeighborChunksDirty(voxelPos);
+    }
+    
+    // Check for unsupported voxels if we removed a voxel
+    if (isRemoving) {
+      // Small delay to let the physics system catch up
+      setTimeout(() => {
+        this.checkUnsupportedVoxels(voxelPos, 3);
+      }, 50);
     }
   }
 
@@ -412,5 +423,216 @@ export class VoxelWorld {
       y--;
     }
     return 0; // Default ground level if no terrain found
+  }
+
+  // Check if a voxel has support underneath
+  private checkUnsupportedVoxels(center: VoxelCoord, radius: number): void {
+    // Track voxels that need to be processed for physics
+    const voxelsToCheck: Array<{pos: VoxelCoord, material: VoxelMaterial}> = [];
+    const processedVoxels = new Set<string>();
+    
+    // Use a larger radius for trees - this ensures we catch all parts of a tree
+    const checkRadius = 6; // Increased from 3 to 6 to handle large trees
+    
+    // First, collect all voxels that might need checking
+    for (let x = -checkRadius; x <= checkRadius; x++) {
+      for (let y = 0; y <= checkRadius * 2; y++) { // Check more upward (trees are tall)
+        for (let z = -checkRadius; z <= checkRadius; z++) {
+          const checkPos = {
+            x: center.x + x,
+            y: center.y + y, // Start checking from the destroyed voxel's level
+            z: center.z + z
+          };
+          
+          // Skip if we've already processed this voxel
+          const key = getVoxelKey(checkPos);
+          if (processedVoxels.has(key)) continue;
+          
+          // Get the voxel material
+          const material = this.getVoxel(checkPos);
+          if (material === undefined) continue;
+          
+          // Only care about voxels that can be affected by gravity
+          if (!voxelProperties[material].gravity) continue;
+          
+          voxelsToCheck.push({ pos: checkPos, material });
+          processedVoxels.add(key);
+        }
+      }
+    }
+    
+    // Process from bottom to top for better physics behavior
+    voxelsToCheck.sort((a, b) => a.pos.y - b.pos.y);
+    
+    // Now check each voxel for support and apply physics if needed
+    for (const { pos, material } of voxelsToCheck) {
+      if (!this.hasSupport(pos)) {
+        // Voxel has no support - convert to a physical object
+        
+        // Remove the static voxel from the world
+        this.setVoxel(pos, undefined);
+        
+        // Create a dynamic physics object for this voxel
+        const physicsObj = this.createDynamicVoxelBody(pos, material);
+        
+        // Add to physics world
+        this.physicsWorld.addBody(physicsObj);
+      }
+    }
+  }
+
+  // Check if a voxel has support underneath or to the sides
+  private hasSupport(voxelPos: VoxelCoord): boolean {
+    // Check if there's a voxel directly underneath
+    const belowPos: VoxelCoord = { x: voxelPos.x, y: voxelPos.y - 1, z: voxelPos.z };
+    const belowVoxel = this.getVoxel(belowPos);
+    
+    // If there's a voxel below, it's supported
+    if (belowVoxel !== undefined) {
+      return true;
+    }
+    
+    // Ground level always counts as supported
+    if (voxelPos.y === 0) {
+      return true;
+    }
+    
+    // For leaves and similar blocks, check if connected to a non-leaf block horizontally
+    // This better represents how tree leaves are connected to branches
+    const material = this.getVoxel(voxelPos);
+    if (material === VoxelMaterial.LEAVES) {
+      // Check all four horizontal neighbors
+      const neighbors = [
+        { x: voxelPos.x + 1, y: voxelPos.y, z: voxelPos.z },
+        { x: voxelPos.x - 1, y: voxelPos.y, z: voxelPos.z },
+        { x: voxelPos.x, y: voxelPos.y, z: voxelPos.z + 1 },
+        { x: voxelPos.x, y: voxelPos.y, z: voxelPos.z - 1 }
+      ];
+      
+      for (const neighbor of neighbors) {
+        const neighborMaterial = this.getVoxel(neighbor);
+        // If there's a wood block next to this leaf, consider it supported
+        if (neighborMaterial === VoxelMaterial.WOOD) {
+          return true;
+        }
+        
+        // Or if there's any other solid block (might be another leaf that's supported)
+        if (neighborMaterial !== undefined) {
+          // Recursively check if this neighbor has support
+          // But limit recursion depth to prevent infinite loops
+          if (this.hasRecursiveSupport(neighbor, 3)) {
+            return true;
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  // Check if a voxel has support with limited recursion
+  private hasRecursiveSupport(voxelPos: VoxelCoord, depth: number): boolean {
+    if (depth <= 0) return false;
+    
+    // Check below
+    const belowPos: VoxelCoord = { x: voxelPos.x, y: voxelPos.y - 1, z: voxelPos.z };
+    const belowVoxel = this.getVoxel(belowPos);
+    if (belowVoxel !== undefined) return true;
+    
+    // Ground level always counts as supported
+    if (voxelPos.y === 0) return true;
+    
+    // For horizontal recursion, only continue if we're checking another leaf connected to a leaf
+    const material = this.getVoxel(voxelPos);
+    if (material === VoxelMaterial.LEAVES) {
+      // Check horizontal neighbors
+      const neighbors = [
+        { x: voxelPos.x + 1, y: voxelPos.y, z: voxelPos.z },
+        { x: voxelPos.x - 1, y: voxelPos.y, z: voxelPos.z },
+        { x: voxelPos.x, y: voxelPos.y, z: voxelPos.z + 1 },
+        { x: voxelPos.x, y: voxelPos.y, z: voxelPos.z - 1 }
+      ];
+      
+      for (const neighbor of neighbors) {
+        const neighborMaterial = this.getVoxel(neighbor);
+        // If there's a wood block, immediate support
+        if (neighborMaterial === VoxelMaterial.WOOD) {
+          return true;
+        }
+        
+        // If it's another leaf, check its support with reduced depth
+        if (neighborMaterial === VoxelMaterial.LEAVES) {
+          if (this.hasRecursiveSupport(neighbor, depth - 1)) {
+            return true;
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  // Create a dynamic physics body for a voxel
+  private createDynamicVoxelBody(voxelPos: VoxelCoord, material: VoxelMaterial): GameObject {
+    const worldPos = voxelToWorld(voxelPos);
+    
+    // Create a dynamic rigid body
+    const rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(worldPos.x, worldPos.y, worldPos.z);
+      
+    const body = this.physicsWorld.world.createRigidBody(rigidBodyDesc);
+    
+    // Create the collider
+    const colliderDesc = RAPIER.ColliderDesc.cuboid(
+      VOXEL_SIZE / 2, 
+      VOXEL_SIZE / 2, 
+      VOXEL_SIZE / 2
+    );
+    
+    // Set physical properties based on the material
+    const voxelProps = voxelProperties[material];
+    colliderDesc.setFriction(voxelProps.friction);
+    colliderDesc.setRestitution(voxelProps.restitution);
+    this.physicsWorld.world.createCollider(colliderDesc, body);
+    
+    // Create a simple mesh for the falling voxel
+    const geometry = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE);
+    const meshMaterial = new THREE.MeshStandardMaterial({
+      color: voxelProps.color,
+      transparent: voxelProps.transparent,
+      opacity: voxelProps.transparent ? 0.8 : 1.0,
+      roughness: 0.7,
+      metalness: 0.1
+    });
+    
+    const mesh = new THREE.Mesh(geometry, meshMaterial);
+    mesh.position.copy(worldPos);
+    this.scene.add(mesh);
+    
+    // Create the game object
+    const gameObj: GameObject = {
+      mesh,
+      body,
+      update: () => {
+        // Update mesh position based on physics body
+        const position = body.translation();
+        mesh.position.set(position.x, position.y, position.z);
+        
+        // Update mesh rotation based on physics body
+        const rotation = body.rotation();
+        mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+        
+        // Remove if fallen too far (cleanup)
+        if (position.y < -20) {
+          this.scene.remove(mesh);
+          this.physicsWorld.removeBody(gameObj);
+          return false; // Signal that this object should be removed
+        }
+        
+        return true;
+      }
+    };
+    
+    return gameObj;
   }
 }
