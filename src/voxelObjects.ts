@@ -322,6 +322,7 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, z: number): vo
     // Create fortress entrance (gate) - complete redesign for structural stability
     const entranceSide = Math.floor(Math.random() * 4);
     let entranceX, entranceZ;
+    const mat = VoxelMaterial.FIXED_STONE;
     
     switch (entranceSide) {
         case 0: // North wall
@@ -332,42 +333,42 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, z: number): vo
             // Step 1: Ensure the sides of the doorway are solid and anchored with fixed rigid bodies
             for (let dy = 0; dy < wallHeight; dy++) {
                 // Left doorpost (reinforced)
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX - 1, 
                     y: groundY + dy, 
                     z: entranceZ 
-                }, fortressMaterial);
+                }, mat);
                 
                 // Right doorpost (reinforced)
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX + 2, 
                     y: groundY + dy, 
                     z: entranceZ 
-                }, fortressMaterial);
+                }, mat);
             }
             
             // Step 2: Create a solid lintel extending to the sides with multiple layers of support
             for (let dx = -1; dx <= 2; dx++) {
                 // Lower lintel layer
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX + dx, 
                     y: groundY + 3, 
                     z: entranceZ 
-                }, fortressMaterial);
+                }, mat);
                 
                 // Upper lintel layer (for additional support)
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX + dx, 
                     y: groundY + 4, 
                     z: entranceZ 
-                }, fortressMaterial);
+                }, mat);
                 
                 // Top lintel layer
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX + dx, 
                     y: groundY + 5, 
                     z: entranceZ 
-                }, fortressMaterial);
+                }, mat);
             }
                 
             // Step 3: Now clear the actual doorway opening (only 2 blocks tall)
@@ -385,42 +386,42 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, z: number): vo
             // Step 1: Ensure the sides of the doorway are solid and anchored
             for (let dy = 0; dy < wallHeight; dy++) {
                 // North doorpost (reinforced)
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX, 
                     y: groundY + dy, 
                     z: entranceZ - 1 
-                }, fortressMaterial);
+                }, mat);
                 
                 // South doorpost (reinforced)
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX, 
                     y: groundY + dy, 
                     z: entranceZ + 2 
-                }, fortressMaterial);
+                }, mat);
             }
             
             // Step 2: Create a solid lintel extending to the sides
             for (let dz = -1; dz <= 2; dz++) {
                 // Lower lintel layer
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX, 
                     y: groundY + 3, 
                     z: entranceZ + dz 
-                }, fortressMaterial);
+                }, mat);
                 
                 // Upper lintel layer
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX, 
                     y: groundY + 4, 
                     z: entranceZ + dz 
-                }, fortressMaterial);
+                }, mat);
                 
                 // Top lintel layer
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX, 
                     y: groundY + 5, 
                     z: entranceZ + dz 
-                }, fortressMaterial);
+                }, mat);
             }
                 
             // Step 3: Now clear the actual doorway opening
@@ -438,42 +439,42 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, z: number): vo
             // Step 1: Ensure the sides of the doorway are solid and anchored
             for (let dy = 0; dy < wallHeight; dy++) {
                 // Left doorpost (reinforced)
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX - 1, 
                     y: groundY + dy, 
                     z: entranceZ 
-                }, fortressMaterial);
+                }, mat);
                 
                 // Right doorpost (reinforced)
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX + 2, 
                     y: groundY + dy, 
                     z: entranceZ 
-                }, fortressMaterial);
+                }, mat);
             }
             
             // Step 2: Create a solid lintel extending to the sides
             for (let dx = -1; dx <= 2; dx++) {
                 // Lower lintel layer
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX + dx, 
                     y: groundY + 3, 
                     z: entranceZ 
-                }, fortressMaterial);
+                }, mat);
                 
                 // Upper lintel layer
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX + dx, 
                     y: groundY + 4, 
                     z: entranceZ 
-                }, fortressMaterial);
+                }, mat);
                 
                 // Top lintel layer
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX + dx, 
                     y: groundY + 5, 
                     z: entranceZ 
-                }, fortressMaterial);
+                }, mat);
             }
                 
             // Step 3: Now clear the actual doorway opening
@@ -491,42 +492,42 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, z: number): vo
             // Step 1: Ensure the sides of the doorway are solid and anchored
             for (let dy = 0; dy < wallHeight; dy++) {
                 // North doorpost (reinforced)
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX, 
                     y: groundY + dy, 
                     z: entranceZ - 1 
-                }, fortressMaterial);
+                }, mat);
                 
                 // South doorpost (reinforced)
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX, 
                     y: groundY + dy, 
                     z: entranceZ + 2 
-                }, fortressMaterial);
+                }, mat);
             }
             
             // Step 2: Create a solid lintel extending to the sides
             for (let dz = -1; dz <= 2; dz++) {
                 // Lower lintel layer
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX, 
                     y: groundY + 3, 
                     z: entranceZ + dz 
-                }, fortressMaterial);
+                }, mat);
                 
                 // Upper lintel layer
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX, 
                     y: groundY + 4, 
                     z: entranceZ + dz 
-                }, fortressMaterial);
+                }, mat);
                 
                 // Top lintel layer
-                voxelWorld.setFixedVoxel({ 
+                voxelWorld.setVoxel({ 
                     x: entranceX, 
                     y: groundY + 5, 
                     z: entranceZ + dz 
-                }, fortressMaterial);
+                }, mat);
             }
                 
             // Step 3: Now clear the actual doorway opening
