@@ -114,9 +114,35 @@ export class EnemyTank extends Tank {
 
     // Check for obstacles using raycasting
     const distanceToPlayer = tankPosition.distanceTo(playerPosition);
+    
+    // First, check voxel collisions using the voxel world raycast function
+    // Slightly raise origin to simulate "eyes" position
+    const tankEyePosition = tankPosition.clone().add(new THREE.Vector3(0, 0.8, 0));
+    
+    // Add a tiny offset to ensure we're not starting inside a voxel
+    // and cast the ray directly toward the player's position
+    const raycastDirection = new THREE.Vector3().subVectors(
+      // Target player's center mass rather than feet position
+      playerPosition.clone().add(new THREE.Vector3(0, 0.8, 0)),
+      tankEyePosition
+    ).normalize();
+    
+    const voxelRaycastResult = this.state.voxelWorld.raycast(
+      tankEyePosition, 
+      raycastDirection,
+      distanceToPlayer
+    );
+    
+    // If we hit a voxel before reaching the player, line of sight is blocked
+    if (voxelRaycastResult.voxel !== null) {
+      // Debug point - we're hitting a voxel
+      return false;
+    }
+    
+    // If no voxels are blocking, perform standard THREE.js raycasting for other objects
     const ray = new THREE.Raycaster(
-      tankPosition.clone().add(new THREE.Vector3(0, 0.5, 0)), // Slightly raise origin to avoid ground
-      directionToPlayer,
+      tankEyePosition,
+      raycastDirection,
       0,
       distanceToPlayer
     );
@@ -156,6 +182,7 @@ export class EnemyTank extends Tank {
       this.hasLineOfSight = this.checkLineOfSight(playerPosition, tankPosition);
 
       if (this.hasLineOfSight) {
+        console.log("Player in line of sight");
         // We can see the player, update the last known position
         this.playerLastKnownPosition = playerPosition.clone();
         this.trackingPlayer = true;
