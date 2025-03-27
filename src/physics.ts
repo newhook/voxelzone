@@ -5,7 +5,6 @@ import { GameConfig } from './config';
 export class PhysicsWorld implements PhysicsWorldType {
   world: RAPIER.World;
   bodies: GameObject[];
-  private eventQueue: RAPIER.EventQueue;
 
   constructor(config: GameConfig) {
     // Create a physics world
@@ -13,9 +12,6 @@ export class PhysicsWorld implements PhysicsWorldType {
     this.world = new RAPIER.World(gravity);
     this.world.timestep = 1/120 // 120 fps
     this.bodies = [];
-    
-    // Create event queue to track physics events
-    this.eventQueue = new RAPIER.EventQueue(true);
 
     // Create ground plane with configurable size
     const groundSize = config.worldSize / 2; // Divide by 2 since the size is total width
@@ -25,10 +21,7 @@ export class PhysicsWorld implements PhysicsWorldType {
 
   update(_deltaTime: number): void {
     // Step the physics simulation
-    this.world.step(this.eventQueue);
-    
-    // Process physics events
-    this.processEvents();
+    this.world.step();
     
     // Check for invalid bodies before updating
     const validBodies = this.bodies.filter(body => {
@@ -59,20 +52,6 @@ export class PhysicsWorld implements PhysicsWorldType {
           body.mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
       }
     }
-  }
-  
-  private processEvents(): void {
-    // Process collision events from the queue
-    this.eventQueue.drainCollisionEvents((handle1, handle2, started) => {
-      if (started) {
-        // A collision started between two colliders
-        const collider1 = this.world.getCollider(handle1);
-        const collider2 = this.world.getCollider(handle2);
-        
-        // The actual collision handling is done in the Projectile class's collision handler
-        // This is just a backup to ensure events are being processed
-      }
-    });
   }
 
   addBody(body: GameObject): void {

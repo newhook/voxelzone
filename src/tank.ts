@@ -77,26 +77,26 @@ export abstract class Tank implements Vehicle {
     // Set initial position
     this.mesh.position.copy(position);
 
-    // Initialize properties
+    // Physics body will be created when the tank is added to the world
+    // For now, just initialize properties
     this.speed = 50;
     this.turnSpeed = 5;
     this.canFire = true;
     this.lastFired = 0;
 
-    // Determine if this is the player tank
-    const isPlayerTank = this instanceof PlayerTank;
-
+    // The body will be set when added to the scene in game.ts
     // Create physics body for the tank
     this.body = createVehicleBody(
-      tankDimensions,
+      { width: 2, height: 0.75, depth: 3 },
       500,
       this.state.physicsWorld.world,
-      this,
-      isPlayerTank
     );
 
     // Set initial physics body position to match mesh
     this.body.setTranslation({ x: position.x, y: position.y, z: position.z }, true);
+
+    // Link the mesh to the physics body for updates
+    this.body.userData = { mesh: this.mesh };
   }
 
   // Helper method to create slightly darker color for cannon
@@ -256,46 +256,30 @@ export abstract class Tank implements Vehicle {
 function createVehicleBody(
   size: { width: number, height: number, depth: number },
   mass: number,
-  world: RAPIER.World,
-  tankObject: Tank,
-  isTankPlayer: boolean = false
+  world: RAPIER.World
 ): RAPIER.RigidBody {
   // Create rigid body description
   const rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(0, size.height / 2, 0)
     .setLinearDamping(0.5)  // Increased from 0.1 to 1.0 for more resistance to movement
     .setAngularDamping(1.0); // Increased from 0.2 to 2.0 for more resistance to rotation
-    
+
   const body = world.createRigidBody(rigidBodyDesc);
-  
+
   // Create collider
   const colliderDesc = RAPIER.ColliderDesc.cuboid(
     size.width / 2,
     size.height / 2,
     size.depth / 2
-  )
-  .setActiveEvents(RAPIER.ActiveEvents.CONTACT_EVENTS);
-  
+  );
+
   // Set mass properties
   colliderDesc.setDensity(mass / (size.width * size.height * size.depth));
   colliderDesc.setFriction(1.5);    // Increased from 0.7 for much better grip
   colliderDesc.setRestitution(0.0); // Reduced from 0.1 to eliminate bouncing
-  
+
   // Attach collider to body
-  const collider = world.createCollider(colliderDesc, body);
-  
-  // Store tank reference in both body and collider userData for collision detection
-  const tankType = isTankPlayer ? 'player' : 'enemy';
-  body.userData = { 
-    mesh: tankObject.mesh,
-    tankObject: tankObject,
-    tankType: tankType
-  };
-  
-  collider.setUserData({
-    tankObject: tankObject,
-    tankType: tankType
-  });
-  
+  world.createCollider(colliderDesc, body);
+
   return body;
 }
