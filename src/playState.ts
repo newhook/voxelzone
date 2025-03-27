@@ -44,7 +44,7 @@ export class PlayState implements IGameState {
   constructor(gameStateManager: GameStateManager) {
     // Create scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x000000);
+    this.scene.background = new THREE.Color(0x87ceeb); // Light sky blue
 
     // Setup game state with configuration
     this.config = {
@@ -77,17 +77,23 @@ export class PlayState implements IGameState {
     this.createOrientationGuide(this.scene);
 
     // Add lighting
-    const ambientLight = new THREE.AmbientLight(0x404040, 2.0); // Doubled from 1.0
+    const ambientLight = new THREE.AmbientLight(0x6b8cff, 4.0); // Increased from 2.0, with a blue tint
     this.scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5); // Increased from 1.0
-    directionalLight.position.set(10, 20, 10);
+    
+    // Main directional light (like the sun)
+    const directionalLight = new THREE.DirectionalLight(0xffffcc, 2.5); // Increased from 1.5, warmer color
+    directionalLight.position.set(100, 200, 100);
+    directionalLight.castShadow = true;
     this.scene.add(directionalLight);
-
-    // Add a distant point light to simulate moonlight
-    const moonLight = new THREE.PointLight(0x7777ff, 1.0, 1000); // Doubled from 0.5
-    moonLight.position.set(-150, 300, -150);
-    this.scene.add(moonLight);
+    
+    // Add a distant point light to simulate sky lighting
+    const skyLight = new THREE.HemisphereLight(0x87ceeb, 0x648c4a, 2.0); // Sky blue and ground green
+    this.scene.add(skyLight);
+    
+    // Add a fill light from another angle to reduce harsh shadows
+    const fillLight = new THREE.DirectionalLight(0xffffee, 1.0);
+    fillLight.position.set(-100, 50, -50);
+    this.scene.add(fillLight);
 
     // Add camera mode indicator to the UI
     const cameraMode = document.createElement('div');

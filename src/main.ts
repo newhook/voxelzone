@@ -14,7 +14,10 @@ async function init() {
   });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setClearColor(0x000000, 1);
+  renderer.setClearColor(0x87CEEB, 1); // Set a light blue sky color
+  renderer.outputEncoding = THREE.sRGBEncoding; // Improve color accuracy
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; // Better dynamic range
+  renderer.toneMappingExposure = 1.5; // Increase overall brightness
 
   const clock = new THREE.Clock();
   document.body.appendChild(renderer.domElement);
