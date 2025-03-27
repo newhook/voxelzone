@@ -15,6 +15,7 @@ export enum VoxelMaterial {
   BRICK = 8,
   CONCRETE = 9,
   METAL = 10,
+  FIXED_STONE = 11,
 }
 
 // Properties for each voxel type
@@ -27,6 +28,7 @@ export interface VoxelProperties {
   gravity: boolean; // Whether it falls if unsupported
   friction: number; // Physics friction
   restitution: number; // Physics bounciness
+  fixed: boolean; // Whether it's a fixed rigid body that won't move
 }
 
 // Define properties for each material type
@@ -39,6 +41,7 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     gravity: true,
     friction: 0.8,
     restitution: 0.1,
+    fixed: false,
   },
   [VoxelMaterial.GRASS]: {
     color: 0x507f35,
@@ -48,6 +51,7 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     gravity: true,
     friction: 0.8,
     restitution: 0.1,
+    fixed: false,
   },
   [VoxelMaterial.STONE]: {
     color: 0x8c8c8c,
@@ -57,6 +61,17 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     gravity: true,
     friction: 0.9,
     restitution: 0.05,
+    fixed: false,
+  },
+  [VoxelMaterial.FIXED_STONE]: {
+    color: 0x8c8c8c,
+    transparent: false,
+    solid: true,
+    breakable: true,
+    gravity: true,
+    friction: 0.9,
+    restitution: 0.05,
+    fixed: true,
   },
   [VoxelMaterial.SAND]: {
     color: 0xdbd28a,
@@ -66,6 +81,7 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     gravity: true,
     friction: 0.6,
     restitution: 0.1,
+    fixed: false,
   },
   [VoxelMaterial.WATER]: {
     color: 0x3d85c6,
@@ -75,6 +91,7 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     gravity: false,
     friction: 0.3,
     restitution: 0,
+    fixed: false,
   },
   [VoxelMaterial.WOOD]: {
     color: 0x8b4513,
@@ -84,6 +101,7 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     gravity: true,
     friction: 0.7,
     restitution: 0.2,
+    fixed: false,
   },
   [VoxelMaterial.LEAVES]: {
     color: 0x31752f,
@@ -93,6 +111,7 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     gravity: false,
     friction: 0.5,
     restitution: 0.1,
+    fixed: false,
   },
   [VoxelMaterial.WALL]: {
     color: 0x4a4a4a,
@@ -102,6 +121,7 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     gravity: false,
     friction: 0.9,
     restitution: 0.0,
+    fixed: true,
   },
   [VoxelMaterial.BRICK]: {
     color: 0xa52a2a, // Brick red
@@ -111,6 +131,7 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     gravity: false,
     friction: 0.85,
     restitution: 0.05,
+    fixed: false,
   },
   [VoxelMaterial.CONCRETE]: {
     color: 0xc0c0c0, // Light gray
@@ -120,6 +141,7 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     gravity: false,
     friction: 0.95,
     restitution: 0.02,
+    fixed: true,
   },
   [VoxelMaterial.METAL]: {
     color: 0x808080, // Gray with metallic appearance
@@ -129,6 +151,7 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     gravity: false,
     friction: 0.7,
     restitution: 0.3, // More bouncy than other materials
+    fixed: true,
   },
 };
 

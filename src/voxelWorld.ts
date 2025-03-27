@@ -105,14 +105,11 @@ export class VoxelWorld {
     };
   }
 
-  // Set a voxel in the world
+  // Create a voxel in the world - this handles both fixed and non-fixed voxels based on material properties
   setVoxel(voxelPos: VoxelCoord, material: VoxelMaterial | undefined): void {
     const chunk = this.getChunkForVoxel(voxelPos);
     const localPos = this.voxelToChunkLocal(voxelPos);
     const key = getVoxelKey(localPos);
-
-    // Store the original material for support checking
-    const originalMaterial = chunk.voxels.get(key);
 
     // Check if we're removing a voxel
     const isRemoving = material === undefined && chunk.voxels.has(key);
@@ -228,35 +225,47 @@ export class VoxelWorld {
             z: chunk.position.z * CHUNK_SIZE + localPos.z
           });
 
-          // Create physics body
-          const body = createObstacleBody(
-            { width: VOXEL_SIZE, height: VOXEL_SIZE, depth: VOXEL_SIZE },
-            { x: worldPos.x, y: worldPos.y, z: worldPos.z },
-            this.physicsWorld.world,
-            0, // Static body
+          // Create appropriate rigid body type based on fixed property
+          let rigidBodyDesc;
+          if (voxelProps.fixed) {
+            // Use fixed rigid body for voxels marked as fixed
+            rigidBodyDesc = RAPIER.RigidBodyDesc.fixed()
+              .setTranslation(worldPos.x, worldPos.y, worldPos.z);
+          } else {
+            // Use static body for normal voxels
+            rigidBodyDesc = RAPIER.RigidBodyDesc.fixed()
+              .setTranslation(worldPos.x, worldPos.y, worldPos.z);
+          }
+          
+          const body = this.physicsWorld.world.createRigidBody(rigidBodyDesc);
+
+          // Create the collider
+          const colliderDesc = RAPIER.ColliderDesc.cuboid(
+            VOXEL_SIZE / 2,
+            VOXEL_SIZE / 2,
+            VOXEL_SIZE / 2
           );
 
-          // Get all colliders on this body to update their properties
-          // for (let j = 0; j < body.numColliders(); j++) {
-          //   const rapierCollider = body.collider(j);
-          //   const collider = this.physicsWorld.world.getCollider(rapierCollider.handle);
+          // Set physical properties based on voxel type
+          if (voxelProps.fixed) {
+            // Fixed bodies have high friction, no bounce, and higher density
+            colliderDesc.setFriction(1.0);
+            colliderDesc.setRestitution(0.0);
+            colliderDesc.setDensity(10.0);
+          } else {
+            // Normal bodies use their material properties
+            colliderDesc.setFriction(voxelProps.friction);
+            colliderDesc.setRestitution(voxelProps.restitution);
+          }
 
-          //   // Make sure collider is solid for player collisions
-          //   collider.setSensor(false);
-
-          //   // Set material properties based on voxel type
-          //   collider.setFriction(voxelProps.friction);
-          //   collider.setRestitution(voxelProps.restitution);
-
-          //   // Enable collision events
-          //   collider.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS);
-          // }
+          // Create the collider
+          this.physicsWorld.world.createCollider(colliderDesc, body);
 
           // Store physics body
           const gameObj: GameObject = {
             mesh: null as any, // We don't need a reference to the mesh
             body,
-            update: () => { } // No updates needed
+            update: () => {} // No updates needed
           };
 
           // Register the voxel with physics world to enable proper collision tracking
