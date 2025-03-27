@@ -14,6 +14,7 @@ export class Projectile implements GameObject {
   mesh: THREE.Mesh;
   body: RAPIER.RigidBody;
   source: ProjectileSource;
+  collisionCallback: number | null = null;
   
   constructor(
     playState: PlayState,
@@ -59,9 +60,17 @@ export class Projectile implements GameObject {
     const colliderDesc = RAPIER.ColliderDesc.ball(0.4)
       .setDensity(1.0)
       .setRestitution(0.5)
-      .setFriction(0.0);
+      .setFriction(0.0)
+      // Enable contact events for collision detection
+      .setActiveEvents(RAPIER.ActiveEvents.CONTACT_EVENTS);
       
-    physicsWorld.world.createCollider(colliderDesc, this.body);
+    const collider = physicsWorld.world.createCollider(colliderDesc, this.body);
+    
+    // Store a reference to the projectile in the collider user data
+    collider.setUserData({projectile: this});
+    
+    // Register collision event handler
+    this.registerCollisionHandler();
     
     // Link mesh to physics body
     this.body.userData = { mesh: this.mesh };
@@ -141,7 +150,102 @@ export class Projectile implements GameObject {
     updateTrail();
   }
   
+  private registerCollisionHandler(): void {
+    const physicsWorld = this.state.physicsWorld;
+    
+    // Set up event listener for collision events
+    const eventHandler = physicsWorld.world.contactPairEvents();
+    
+    this.collisionCallback = eventHandler.on("begin", (event: RAPIER.TempContactManifold) => {
+      // Get the colliders involved in the collision
+      const collider1 = event.collider1();
+      const collider2 = event.collider2();
+      
+      // Check if this projectile is involved in the collision
+      let projectile: Projectile | null = null;
+      let otherCollider: RAPIER.Collider | null = null;
+      
+      const userData1 = collider1.userData();
+      const userData2 = collider2.userData();
+      
+      if (userData1 && userData1.projectile === this) {
+        projectile = this;
+        otherCollider = collider2;
+      } else if (userData2 && userData2.projectile === this) {
+        projectile = this;
+        otherCollider = collider1;
+      }
+      
+      // If this projectile is involved in the collision
+      if (projectile && otherCollider) {
+        // Get projectile position
+        const position = this.body.translation();
+        const projectileVector = new THREE.Vector3(position.x, position.y, position.z);
+        
+        // Check if we hit a tank (enemy or player)
+        const hitTank = this.checkTankCollision(otherCollider);
+        
+        // Create explosion effect regardless of what was hit
+        this.createExplosionEffect(projectileVector);
+        
+        // Handle voxel destruction if not hitting a tank
+        if (!hitTank) {
+          // Use the projectile's position to find nearby voxels to destroy
+          const voxelPosition = this.state.voxelWorld.raycast(
+            projectileVector,
+            new THREE.Vector3(
+              this.body.linvel().x, 
+              this.body.linvel().y, 
+              this.body.linvel().z
+            ).normalize(),
+            0.8
+          ).voxel;
+          
+          if (voxelPosition) {
+            this.destroyVoxelsInRadius(voxelPosition, 1.5);
+          }
+        }
+        
+        // Destroy the projectile
+        this.destroy();
+      }
+    });
+  }
+  
+  private checkTankCollision(collider: RAPIER.Collider): boolean {
+    // Get the rigid body attached to this collider
+    const hitBody = collider.parent();
+    if (!hitBody) return false;
+    
+    // Check if the hit body belongs to a tank
+    const bodyData = hitBody.userData();
+    
+    if (bodyData && bodyData.tankObject) {
+      // It's a tank! Handle tank hit based on source
+      if (this.source === ProjectileSource.PLAYER && bodyData.tankType === 'enemy') {
+        // Player hit enemy tank
+        const enemyTank = bodyData.tankObject;
+        enemyTank.takeDamage(1);
+        return true;
+      } else if (this.source === ProjectileSource.ENEMY && bodyData.tankType === 'player') {
+        // Enemy hit player tank
+        const playerTank = bodyData.tankObject;
+        playerTank.takeDamage(1);
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
   destroy(): void {
+    // Unregister collision handler if it exists
+    if (this.collisionCallback !== null) {
+      const eventHandler = this.state.physicsWorld.world.contactPairEvents();
+      eventHandler.off(this.collisionCallback);
+      this.collisionCallback = null;
+    }
+    
     const scene = this.state.scene;
     if (scene && this.mesh.parent) {
       scene.remove(this.mesh);
@@ -157,34 +261,18 @@ export class Projectile implements GameObject {
   }
   
   update(): void {
-    // Check if the projectile is still active
-    if (!this.body || !this.mesh) return;
-
-    // Get current projectile position from the physics body
-    const projectilePos = this.body.translation();
-    const projectileVector = new THREE.Vector3(projectilePos.x, projectilePos.y, projectilePos.z);
-
-    // Check if projectile hit a voxel
-    const rayResult = this.state.voxelWorld.raycast(
-      projectileVector,
-      // Use projectile's velocity as direction for the ray
-      new THREE.Vector3(
-        this.body.linvel().x, 
-        this.body.linvel().y, 
-        this.body.linvel().z
-      ).normalize(),
-      0.5 // Short distance check
-    );
-
-    // If we hit a voxel, destroy the projectile and the voxel
-    if (rayResult.voxel) {
-      // Create explosion effect
-      this.createExplosionEffect(projectileVector);
-
-      // Destroy voxels in a small radius
-      this.destroyVoxelsInRadius(rayResult.voxel, 1.5);
-
-      // Destroy the projectile
+    // Nothing special needed here anymore - collisions are handled by physics events
+    // We could still add some additional checks if needed
+    
+    // Check if projectile went out of bounds
+    const position = this.body.translation();
+    const bounds = this.state.config.worldSize / 2;
+    
+    if (
+      position.x < -bounds || position.x > bounds || 
+      position.y < -10 || position.y > 100 || 
+      position.z < -bounds || position.z > bounds
+    ) {
       this.destroy();
     }
   }
