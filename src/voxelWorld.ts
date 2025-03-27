@@ -596,7 +596,6 @@ export class VoxelWorld {
 
   // Check if a voxel has support underneath or to the sides
   private hasSupport(voxelPos: VoxelCoord): boolean {
-    console.log('Checking support for voxel at', voxelPos);
     // Check if there's a voxel directly underneath
     const belowPos: VoxelCoord = { x: voxelPos.x, y: voxelPos.y - 1, z: voxelPos.z };
     const belowVoxel = this.getVoxel(belowPos);
@@ -768,5 +767,65 @@ export class VoxelWorld {
     };
 
     return gameObj;
+  }
+
+  // Create a fixed rigid body voxel that will never move/fall
+  setFixedVoxel(voxelPos: VoxelCoord, material: VoxelMaterial): void {
+    // First set the voxel in the world like normal
+    this.setVoxel(voxelPos, material);
+    
+    // Get the chunk and local position
+    const chunk = this.getChunkForVoxel(voxelPos);
+    const localPos = this.voxelToChunkLocal(voxelPos);
+    const key = getVoxelKey(localPos);
+    
+    // Get the world position for physics
+    const worldPos = voxelToWorld({
+      x: chunk.position.x * CHUNK_SIZE + localPos.x,
+      y: chunk.position.y * CHUNK_SIZE + localPos.y,
+      z: chunk.position.z * CHUNK_SIZE + localPos.z
+    });
+    
+    // Remove any existing physics body
+    if (chunk.physicsObjects.has(key)) {
+      const gameObj = chunk.physicsObjects.get(key)!;
+      this.physicsWorld.removeBody(gameObj);
+      chunk.physicsObjects.delete(key);
+    }
+    
+    // Create a fixed rigid body with higher mass and locked translations/rotations
+    const rigidBodyDesc = RAPIER.RigidBodyDesc.fixed()
+      .setTranslation(worldPos.x, worldPos.y, worldPos.z);
+    
+    const body = this.physicsWorld.world.createRigidBody(rigidBodyDesc);
+    
+    // Create the collider with higher density
+    const colliderDesc = RAPIER.ColliderDesc.cuboid(
+      VOXEL_SIZE / 2,
+      VOXEL_SIZE / 2,
+      VOXEL_SIZE / 2
+    );
+    
+    // Set physical properties - high friction and low restitution
+    const voxelProps = voxelProperties[material];
+    colliderDesc.setFriction(1.0); // Maximum friction
+    colliderDesc.setRestitution(0.0); // No bounce
+    colliderDesc.setDensity(10.0); // Higher density than normal voxels
+    
+    this.physicsWorld.world.createCollider(colliderDesc, body);
+    
+    // Create the game object
+    const gameObj: GameObject = {
+      mesh: null as any, // We don't need a reference to the mesh
+      body,
+      update: () => {} // No updates needed for fixed bodies
+    };
+    
+    // Register with physics world and store in chunk
+    this.physicsWorld.addBody(gameObj);
+    chunk.physicsObjects.set(key, gameObj);
+    
+    // Mark chunk as dirty for re-rendering
+    chunk.dirty = true;
   }
 }

@@ -79,7 +79,35 @@ async function init() {
     gameStateManager.render(renderer);
   }
 
+  let previousTime = 0;
+  let timeAccumulator = 0;
+  let totalElapsedTime = 0;
+  let fixedTimeStep = 1 / 60;
+
+  function animate2() {
+    const currentTime = performance.now();
+    const timeDelta = (currentTime - previousTime) / 1000; // Convert to seconds
+    previousTime = currentTime;
+
+    // Cap the time delta to avoid large jumps (e.g., if the tab was inactive)
+    const cappedDelta = Math.min(timeDelta, 0.1); // Max 100ms per frame
+    timeAccumulator += cappedDelta;
+    totalElapsedTime += cappedDelta;
+
+    // Process the physics simulation in fixed time steps
+    while (timeAccumulator >= fixedTimeStep) {
+      // Update FPS counter
+      updateFPS();
+
+      gameStateManager.update(fixedTimeStep);
+      gameStateManager.render(renderer);
+      timeAccumulator -= fixedTimeStep;
+    }
+    requestAnimationFrame(animate2);
+  }
+
   // Start the animation loop
+  // animate();
   animate();
 
   // Handle window resize

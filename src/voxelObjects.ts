@@ -215,14 +215,17 @@ export function createWoodenFence(voxelWorld: VoxelWorld, x: number, y: number, 
 }
 
 /**
- * Creates a central fortress structure
+ * Creates a central fortress structure with structurally reinforced doorway
  */
 export function createFortress(voxelWorld: VoxelWorld, x: number, z: number): void {
     const groundY = voxelWorld.findSurfaceHeight(x, z);
     // Main fortress parameters
     const size = 10;
     const wallHeight = 6;
-
+    
+    // Define the fortress material - STONE is used for all parts of the fortress
+    const fortressMaterial = VoxelMaterial.STONE;
+    
     // Create the outer walls
     for (let dx = 0; dx < size; dx++) {
         for (let dz = 0; dz < size; dz++) {
@@ -233,98 +236,301 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, z: number): vo
                         x: x + dx - Math.floor(size / 2),
                         y: groundY + dy,
                         z: z + dz - Math.floor(size / 2)
-                    }, VoxelMaterial.STONE);
+                    }, fortressMaterial);
                 }
             }
         }
     }
-
+    
     // Create towers at each corner
     const towerHeight = wallHeight + 2;
     const corners = [
-        { dx: 0, dz: 0 },
-        { dx: 0, dz: size - 1 },
-        { dx: size - 1, dz: 0 },
-        { dx: size - 1, dz: size - 1 }
+        { dx: 0, dz: 0 },                 // Northwest corner
+        { dx: 0, dz: size - 1 },          // Southwest corner
+        { dx: size - 1, dz: 0 },          // Northeast corner
+        { dx: size - 1, dz: size - 1 }    // Southeast corner
     ];
-
+    
     corners.forEach(corner => {
+        // Calculate the tower offset from center
+        const towerOffsetX = x - Math.floor(size / 2) + (corner.dx === 0 ? -1 : size);
+        const towerOffsetZ = z - Math.floor(size / 2) + (corner.dz === 0 ? -1 : size);
+        
+        // Create the 2x2 tower
         for (let dy = 0; dy < towerHeight; dy++) {
-            // 2x2 tower at each corner
             for (let tx = 0; tx < 2; tx++) {
                 for (let tz = 0; tz < 2; tz++) {
+                    const towerX = towerOffsetX + (corner.dx === 0 ? tx : -tx);
+                    const towerZ = towerOffsetZ + (corner.dz === 0 ? tz : -tz);
+                    
                     voxelWorld.setVoxel({
-                        x: x + corner.dx + (corner.dx === 0 ? -tx : tx) - Math.floor(size / 2),
+                        x: towerX,
                         y: groundY + dy,
-                        z: z + corner.dz + (corner.dz === 0 ? -tz : tz) - Math.floor(size / 2)
-                    }, VoxelMaterial.STONE);
+                        z: towerZ
+                    }, fortressMaterial);
                 }
             }
         }
-
-        // Add battlements on top of towers
-        for (let tx = -1; tx <= 2; tx++) {
-            for (let tz = -1; tz <= 2; tz++) {
-                if ((tx === -1 || tx === 2) || (tz === -1 || tz === 2)) {
-                    if ((tx === -1 || tx === 2) && (tz === -1 || tz === 2)) {
-                        // Skip diagonal corners
-                        continue;
-                    }
-
+        
+        // Add battlements on top of towers - properly aligned with the tower blocks
+        for (let tx = 0; tx < 2; tx++) {
+            for (let tz = 0; tz < 2; tz++) {
+                // Calculate the base coordinates of this tower
+                const towerBaseX = towerOffsetX + (corner.dx === 0 ? tx : -tx);
+                const towerBaseZ = towerOffsetZ + (corner.dz === 0 ? tz : -tz);
+                
+                // Add a battlement on each side of the tower (but not in the middle)
+                // North side
+                if (tx === 0 || tx === 1) {
                     voxelWorld.setVoxel({
-                        x: x + corner.dx + (corner.dx === 0 ? tx : tx) - Math.floor(size / 2),
+                        x: towerBaseX,
                         y: groundY + towerHeight,
-                        z: z + corner.dz + (corner.dz === 0 ? tz : tz) - Math.floor(size / 2)
-                    }, VoxelMaterial.STONE);
+                        z: towerBaseZ - 1
+                    }, fortressMaterial);
+                }
+                
+                // South side
+                if (tx === 0 || tx === 1) {
+                    voxelWorld.setVoxel({
+                        x: towerBaseX,
+                        y: groundY + towerHeight,
+                        z: towerBaseZ + 1
+                    }, fortressMaterial);
+                }
+                
+                // East side
+                if (tz === 0 || tz === 1) {
+                    voxelWorld.setVoxel({
+                        x: towerBaseX + 1,
+                        y: groundY + towerHeight,
+                        z: towerBaseZ
+                    }, fortressMaterial);
+                }
+                
+                // West side
+                if (tz === 0 || tz === 1) {
+                    voxelWorld.setVoxel({
+                        x: towerBaseX - 1,
+                        y: groundY + towerHeight,
+                        z: towerBaseZ
+                    }, fortressMaterial);
                 }
             }
         }
     });
-
-    // Create entrance (gate)
+    
+    // Create fortress entrance (gate) - complete redesign for structural stability
     const entranceSide = Math.floor(Math.random() * 4);
     let entranceX, entranceZ;
-
+    
     switch (entranceSide) {
         case 0: // North wall
             entranceX = x;
             entranceZ = z - Math.floor(size / 2);
-
-            // Create opening
-            for (let dy = 1; dy <= 3; dy++) {
+                
+            // Build the full doorway structure first - exterior reinforcement
+            // Step 1: Ensure the sides of the doorway are solid and anchored with fixed rigid bodies
+            for (let dy = 0; dy < wallHeight; dy++) {
+                // Left doorpost (reinforced)
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX - 1, 
+                    y: groundY + dy, 
+                    z: entranceZ 
+                }, fortressMaterial);
+                
+                // Right doorpost (reinforced)
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX + 2, 
+                    y: groundY + dy, 
+                    z: entranceZ 
+                }, fortressMaterial);
+            }
+            
+            // Step 2: Create a solid lintel extending to the sides with multiple layers of support
+            for (let dx = -1; dx <= 2; dx++) {
+                // Lower lintel layer
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX + dx, 
+                    y: groundY + 3, 
+                    z: entranceZ 
+                }, fortressMaterial);
+                
+                // Upper lintel layer (for additional support)
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX + dx, 
+                    y: groundY + 4, 
+                    z: entranceZ 
+                }, fortressMaterial);
+                
+                // Top lintel layer
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX + dx, 
+                    y: groundY + 5, 
+                    z: entranceZ 
+                }, fortressMaterial);
+            }
+                
+            // Step 3: Now clear the actual doorway opening (only 2 blocks tall)
+            for (let dy = 1; dy <= 2; dy++) {
                 voxelWorld.setVoxel({ x: entranceX, y: groundY + dy, z: entranceZ }, undefined);
                 voxelWorld.setVoxel({ x: entranceX + 1, y: groundY + dy, z: entranceZ }, undefined);
             }
             break;
-
+                
         case 1: // East wall
             entranceX = x + Math.floor(size / 2);
             entranceZ = z;
-
-            // Create opening
-            for (let dy = 1; dy <= 3; dy++) {
+                
+            // Build the full doorway structure first with fixed rigid bodies
+            // Step 1: Ensure the sides of the doorway are solid and anchored
+            for (let dy = 0; dy < wallHeight; dy++) {
+                // North doorpost (reinforced)
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX, 
+                    y: groundY + dy, 
+                    z: entranceZ - 1 
+                }, fortressMaterial);
+                
+                // South doorpost (reinforced)
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX, 
+                    y: groundY + dy, 
+                    z: entranceZ + 2 
+                }, fortressMaterial);
+            }
+            
+            // Step 2: Create a solid lintel extending to the sides
+            for (let dz = -1; dz <= 2; dz++) {
+                // Lower lintel layer
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX, 
+                    y: groundY + 3, 
+                    z: entranceZ + dz 
+                }, fortressMaterial);
+                
+                // Upper lintel layer
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX, 
+                    y: groundY + 4, 
+                    z: entranceZ + dz 
+                }, fortressMaterial);
+                
+                // Top lintel layer
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX, 
+                    y: groundY + 5, 
+                    z: entranceZ + dz 
+                }, fortressMaterial);
+            }
+                
+            // Step 3: Now clear the actual doorway opening
+            for (let dy = 1; dy <= 2; dy++) {
                 voxelWorld.setVoxel({ x: entranceX, y: groundY + dy, z: entranceZ }, undefined);
                 voxelWorld.setVoxel({ x: entranceX, y: groundY + dy, z: entranceZ + 1 }, undefined);
             }
             break;
-
+                
         case 2: // South wall
             entranceX = x;
             entranceZ = z + Math.floor(size / 2);
-
-            // Create opening
-            for (let dy = 1; dy <= 3; dy++) {
+            
+            // Build the full doorway structure first with fixed rigid bodies
+            // Step 1: Ensure the sides of the doorway are solid and anchored
+            for (let dy = 0; dy < wallHeight; dy++) {
+                // Left doorpost (reinforced)
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX - 1, 
+                    y: groundY + dy, 
+                    z: entranceZ 
+                }, fortressMaterial);
+                
+                // Right doorpost (reinforced)
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX + 2, 
+                    y: groundY + dy, 
+                    z: entranceZ 
+                }, fortressMaterial);
+            }
+            
+            // Step 2: Create a solid lintel extending to the sides
+            for (let dx = -1; dx <= 2; dx++) {
+                // Lower lintel layer
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX + dx, 
+                    y: groundY + 3, 
+                    z: entranceZ 
+                }, fortressMaterial);
+                
+                // Upper lintel layer
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX + dx, 
+                    y: groundY + 4, 
+                    z: entranceZ 
+                }, fortressMaterial);
+                
+                // Top lintel layer
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX + dx, 
+                    y: groundY + 5, 
+                    z: entranceZ 
+                }, fortressMaterial);
+            }
+                
+            // Step 3: Now clear the actual doorway opening
+            for (let dy = 1; dy <= 2; dy++) {
                 voxelWorld.setVoxel({ x: entranceX, y: groundY + dy, z: entranceZ }, undefined);
                 voxelWorld.setVoxel({ x: entranceX + 1, y: groundY + dy, z: entranceZ }, undefined);
             }
             break;
-
+                
         case 3: // West wall
             entranceX = x - Math.floor(size / 2);
             entranceZ = z;
-
-            // Create opening
-            for (let dy = 1; dy <= 3; dy++) {
+                
+            // Build the full doorway structure first with fixed rigid bodies
+            // Step 1: Ensure the sides of the doorway are solid and anchored
+            for (let dy = 0; dy < wallHeight; dy++) {
+                // North doorpost (reinforced)
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX, 
+                    y: groundY + dy, 
+                    z: entranceZ - 1 
+                }, fortressMaterial);
+                
+                // South doorpost (reinforced)
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX, 
+                    y: groundY + dy, 
+                    z: entranceZ + 2 
+                }, fortressMaterial);
+            }
+            
+            // Step 2: Create a solid lintel extending to the sides
+            for (let dz = -1; dz <= 2; dz++) {
+                // Lower lintel layer
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX, 
+                    y: groundY + 3, 
+                    z: entranceZ + dz 
+                }, fortressMaterial);
+                
+                // Upper lintel layer
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX, 
+                    y: groundY + 4, 
+                    z: entranceZ + dz 
+                }, fortressMaterial);
+                
+                // Top lintel layer
+                voxelWorld.setFixedVoxel({ 
+                    x: entranceX, 
+                    y: groundY + 5, 
+                    z: entranceZ + dz 
+                }, fortressMaterial);
+            }
+                
+            // Step 3: Now clear the actual doorway opening
+            for (let dy = 1; dy <= 2; dy++) {
                 voxelWorld.setVoxel({ x: entranceX, y: groundY + dy, z: entranceZ }, undefined);
                 voxelWorld.setVoxel({ x: entranceX, y: groundY + dy, z: entranceZ + 1 }, undefined);
             }
