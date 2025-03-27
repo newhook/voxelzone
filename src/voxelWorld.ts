@@ -148,8 +148,8 @@ export class VoxelWorld {
         // Use a larger delay to ensure the physics system has time to process
         setTimeout(() => {
           // For wood blocks, use a larger check radius to catch the entire tree
-          this.checkUnsupportedVoxels(voxelPos, 8);
-        }, 100);
+          this.checkUnsupportedVoxelsWithFeedback(voxelPos, 8);
+        }, 50);
       } else {
         // Regular handling for other materials
         setTimeout(() => {
@@ -443,16 +443,19 @@ export class VoxelWorld {
     const voxelsToCheck: Array<{pos: VoxelCoord, material: VoxelMaterial}> = [];
     const processedVoxels = new Set<string>();
     
-    // Use a larger radius for trees - this ensures we catch all parts of a tree
-    const checkRadius = radius; // Use the provided radius (8 for trees, 3 for other materials)
+    // First, let's quickly check if the center voxel is a tree trunk (wood)
+    const isTrunkRemoval = this.getAdjacentWoodCount(center) > 0;
     
-    // First, collect all voxels that might need checking
+    // Increase radius for tree structures to ensure we catch the entire tree
+    const checkRadius = isTrunkRemoval ? 10 : radius;
+    
+    // First pass: collect all wood blocks that might need checking
     for (let x = -checkRadius; x <= checkRadius; x++) {
       for (let y = 0; y <= checkRadius * 2; y++) { // Check more upward (trees are tall)
         for (let z = -checkRadius; z <= checkRadius; z++) {
           const checkPos = {
             x: center.x + x,
-            y: center.y + y, // Start checking from the destroyed voxel's level
+            y: center.y + y,
             z: center.z + z
           };
           
@@ -464,6 +467,51 @@ export class VoxelWorld {
           const material = this.getVoxel(checkPos);
           if (material === undefined) continue;
           
+          // First collect all wood blocks that might be unsupported
+          if (material === VoxelMaterial.WOOD) {
+            voxelsToCheck.push({ pos: checkPos, material });
+            processedVoxels.add(key);
+          }
+        }
+      }
+    }
+    
+    // Process all wood blocks first
+    for (const { pos, material } of voxelsToCheck) {
+      // Check if this wood block has a support chain to the ground
+      if (!this.hasWoodSupportChain(pos)) {
+        // No support chain - convert to a physical object
+        this.setVoxel(pos, undefined);
+        const physicsObj = this.createDynamicVoxelBody(pos, material);
+        this.physicsWorld.addBody(physicsObj);
+      }
+    }
+    
+    // Clear the arrays for the second pass
+    voxelsToCheck.length = 0;
+    processedVoxels.clear();
+    
+    // Second pass: collect all non-wood blocks (leaves, etc.) that might need checking
+    for (let x = -checkRadius; x <= checkRadius; x++) {
+      for (let y = 0; y <= checkRadius * 2; y++) {
+        for (let z = -checkRadius; z <= checkRadius; z++) {
+          const checkPos = {
+            x: center.x + x,
+            y: center.y + y,
+            z: center.z + z
+          };
+          
+          // Skip if we've already processed this voxel
+          const key = getVoxelKey(checkPos);
+          if (processedVoxels.has(key)) continue;
+          
+          // Get the voxel material
+          const material = this.getVoxel(checkPos);
+          if (material === undefined) continue;
+          
+          // Skip wood, we've already processed those
+          if (material === VoxelMaterial.WOOD) continue;
+          
           // Only care about voxels that can be affected by gravity
           if (!voxelProperties[material].gravity) continue;
           
@@ -473,23 +521,9 @@ export class VoxelWorld {
       }
     }
     
-    // Process from bottom to top for better physics behavior
-    voxelsToCheck.sort((a, b) => a.pos.y - b.pos.y);
-    
-    // Now check each voxel for support and apply physics if needed
+    // Process all non-wood blocks now that wood blocks have been processed
     for (const { pos, material } of voxelsToCheck) {
-      // For wood blocks (tree trunks), specifically check the support chain
-      if (material === VoxelMaterial.WOOD) {
-        // Check if this wood block has a support chain to the ground
-        if (!this.hasWoodSupportChain(pos)) {
-          // No support chain - convert to a physical object
-          this.setVoxel(pos, undefined);
-          const physicsObj = this.createDynamicVoxelBody(pos, material);
-          this.physicsWorld.addBody(physicsObj);
-        }
-      } 
-      // For other materials, use the regular support check
-      else if (!this.hasSupport(pos)) {
+      if (!this.hasSupport(pos)) {
         // Voxel has no support - convert to a physical object
         this.setVoxel(pos, undefined);
         const physicsObj = this.createDynamicVoxelBody(pos, material);
@@ -498,37 +532,73 @@ export class VoxelWorld {
     }
   }
   
+  // Count the number of adjacent wood blocks to determine if we're breaking a tree trunk
+  private getAdjacentWoodCount(pos: VoxelCoord): number {
+    let count = 0;
+    for (const neighbor of getVoxelNeighbors(pos)) {
+      if (this.getVoxel(neighbor) === VoxelMaterial.WOOD) {
+        count++;
+      }
+    }
+    
+    return count;
+  }
+
   // Check if a wood block has a continuous chain of support to the ground
   private hasWoodSupportChain(startPos: VoxelCoord): boolean {
     // Track visited positions to avoid loops
     const visited = new Set<string>();
+    const queue: VoxelCoord[] = [startPos];
     
-    // Start with the given position
-    let currentPos = { ...startPos };
-    
-    // Continue checking downward until we reach the ground or run out of wood blocks
-    while (true) {
-      // Mark current position as visited
-      visited.add(getVoxelKey(currentPos));
+    while (queue.length > 0) {
+      const currentPos = queue.shift()!;
+      const key = getVoxelKey(currentPos);
+      
+      if (visited.has(key)) continue;
+      visited.add(key);
       
       // We reached ground level - the chain is supported
       if (currentPos.y === 0) {
         return true;
       }
       
-      // Check the block directly below
+      // Check below first (vertical support is primary)
       const belowPos = { x: currentPos.x, y: currentPos.y - 1, z: currentPos.z };
       const belowMaterial = this.getVoxel(belowPos);
       
-      // If there's a block below (any solid block), continue the chain downward
+      // If there's a solid block below, it's potentially supported
       if (belowMaterial !== undefined) {
-        // Move down to continue the chain
-        currentPos = belowPos;
-      } else {
-        // No support below this point - the chain is broken
-        return false;
+        const belowKey = getVoxelKey(belowPos);
+        if (!visited.has(belowKey)) {
+          queue.push(belowPos);
+          continue; // Continue with BFS
+        }
+      }
+      
+      // No support directly below, check for horizontal supports for wood only
+      if (this.getVoxel(currentPos) === VoxelMaterial.WOOD) {
+        // Check all four horizontal directions for wood supports
+        const horizontalNeighbors = [
+          { x: currentPos.x + 1, y: currentPos.y, z: currentPos.z },
+          { x: currentPos.x - 1, y: currentPos.y, z: currentPos.z },
+          { x: currentPos.x, y: currentPos.y, z: currentPos.z + 1 },
+          { x: currentPos.x, y: currentPos.y, z: currentPos.z - 1 }
+        ];
+        
+        for (const neighbor of horizontalNeighbors) {
+          const neighborMaterial = this.getVoxel(neighbor);
+          if (neighborMaterial === VoxelMaterial.WOOD) {
+            const neighborKey = getVoxelKey(neighbor);
+            if (!visited.has(neighborKey)) {
+              queue.push(neighbor);
+            }
+          }
+        }
       }
     }
+    
+    // No path to ground or other support found
+    return false;
   }
 
   // Check if a voxel has support underneath or to the sides
@@ -704,5 +774,118 @@ export class VoxelWorld {
     };
     
     return gameObj;
+  }
+
+  // Special version of checkUnsupportedVoxels that works in multiple passes with feedback between passes
+  private checkUnsupportedVoxelsWithFeedback(center: VoxelCoord, radius: number): void {
+    // Set of positions that have been modified - we'll use this to track cascading effects
+    const modifiedPositions = new Set<string>();
+    
+    // Set a large enough radius to catch tall trees
+    const checkRadius = 10;
+    
+    // We'll make multiple passes to ensure cascading physics works correctly
+    for (let passes = 0; passes < 3; passes++) {
+      let madeChanges = false;
+      
+      // Initialize tracking arrays
+      const voxelsToCheck: Array<{pos: VoxelCoord, material: VoxelMaterial}> = [];
+      const processedVoxels = new Set<string>();
+      
+      // First collect all blocks in radius, prioritizing wood blocks
+      for (let y = checkRadius * 2; y >= -1; y--) {  // Start from top down
+        for (let x = -checkRadius; x <= checkRadius; x++) {
+          for (let z = -checkRadius; z <= checkRadius; z++) {
+            const checkPos = {
+              x: center.x + x,
+              y: center.y + y,
+              z: center.z + z
+            };
+            
+            // Skip if we've already processed this voxel in this pass
+            const key = getVoxelKey(checkPos);
+            if (processedVoxels.has(key)) continue;
+            
+            // Get the voxel material
+            const material = this.getVoxel(checkPos);
+            if (material === undefined) continue;
+            
+            // Only care about voxels that can be affected by gravity
+            if (!voxelProperties[material].gravity) continue;
+            
+            // Add to processing list - prioritize WOOD and LEAVES
+            voxelsToCheck.push({ pos: checkPos, material });
+            processedVoxels.add(key);
+          }
+        }
+      }
+      
+      // Sort voxels - process from top to bottom for more realistic falling
+      voxelsToCheck.sort((a, b) => b.pos.y - a.pos.y);
+      
+      // Process all voxels
+      for (const { pos, material } of voxelsToCheck) {
+        // Skip if this voxel was already turned into a physical object in a previous pass
+        if (this.getVoxel(pos) === undefined) continue;
+        
+        let shouldFall = false;
+        
+        if (material === VoxelMaterial.WOOD) {
+          // For wood blocks, check support chain to ground
+          shouldFall = !this.hasWoodSupportChain(pos);
+        } else if (material === VoxelMaterial.LEAVES) {
+          // For leaves, check all possible support paths
+          // Check below first for direct support
+          const belowPos = { x: pos.x, y: pos.y - 1, z: pos.z };
+          const belowMaterial = this.getVoxel(belowPos);
+          
+          if (belowMaterial === undefined || 
+             (belowMaterial === VoxelMaterial.WOOD && !this.hasWoodSupportChain(belowPos))) {
+            // No direct support below, check nearby wood blocks
+            let hasNearbySupport = false;
+            const neighbors = [
+              { x: pos.x + 1, y: pos.y, z: pos.z },
+              { x: pos.x - 1, y: pos.y, z: pos.z },
+              { x: pos.x, y: pos.y, z: pos.z + 1 },
+              { x: pos.x, y: pos.y, z: pos.z - 1 }
+            ];
+            
+            for (const neighbor of neighbors) {
+              const neighborMaterial = this.getVoxel(neighbor);
+              if (neighborMaterial === VoxelMaterial.WOOD && this.hasWoodSupportChain(neighbor)) {
+                hasNearbySupport = true;
+                break;
+              }
+            }
+            
+            if (!hasNearbySupport) {
+              shouldFall = true;
+            }
+          }
+        } else {
+          // For other materials, use the standard support check
+          shouldFall = !this.hasSupport(pos);
+        }
+        
+        if (shouldFall) {
+          // Convert to physical object
+          this.setVoxel(pos, undefined);
+          const physicsObj = this.createDynamicVoxelBody(pos, material);
+          this.physicsWorld.addBody(physicsObj);
+          
+          // Track that we made a change and which position was modified
+          madeChanges = true;
+          modifiedPositions.add(getVoxelKey(pos));
+        }
+      }
+      
+      // If no changes were made in this pass, we're done
+      if (!madeChanges) {
+        break;
+      }
+      
+      // Short delay between passes (this is simulated in the loop - in a real implementation
+      // we'd use async/await or setTimeout, but for simplicity we'll continue immediately)
+    }
   }
 }
