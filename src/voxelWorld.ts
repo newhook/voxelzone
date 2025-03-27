@@ -111,6 +111,9 @@ export class VoxelWorld {
     const localPos = this.voxelToChunkLocal(voxelPos);
     const key = getVoxelKey(localPos);
 
+    // Store the original material for support checking
+    const originalMaterial = chunk.voxels.get(key);
+    
     // Check if we're removing a voxel
     const isRemoving = material === undefined && chunk.voxels.has(key);
     
@@ -140,10 +143,19 @@ export class VoxelWorld {
     
     // Check for unsupported voxels if we removed a voxel
     if (isRemoving) {
-      // Small delay to let the physics system catch up
-      setTimeout(() => {
-        this.checkUnsupportedVoxels(voxelPos, 3);
-      }, 50);
+      // Special handling for wood blocks (tree trunks)
+      if (originalMaterial === VoxelMaterial.WOOD) {
+        // Use a larger delay to ensure the physics system has time to process
+        setTimeout(() => {
+          // For wood blocks, use a larger check radius to catch the entire tree
+          this.checkUnsupportedVoxels(voxelPos, 8);
+        }, 100);
+      } else {
+        // Regular handling for other materials
+        setTimeout(() => {
+          this.checkUnsupportedVoxels(voxelPos, 3);
+        }, 50);
+      }
     }
   }
 
@@ -425,14 +437,14 @@ export class VoxelWorld {
     return 0; // Default ground level if no terrain found
   }
 
-  // Check if a voxel has support underneath
+  // Check for unsupported voxels in a region
   private checkUnsupportedVoxels(center: VoxelCoord, radius: number): void {
     // Track voxels that need to be processed for physics
     const voxelsToCheck: Array<{pos: VoxelCoord, material: VoxelMaterial}> = [];
     const processedVoxels = new Set<string>();
     
     // Use a larger radius for trees - this ensures we catch all parts of a tree
-    const checkRadius = 6; // Increased from 3 to 6 to handle large trees
+    const checkRadius = radius; // Use the provided radius (8 for trees, 3 for other materials)
     
     // First, collect all voxels that might need checking
     for (let x = -checkRadius; x <= checkRadius; x++) {
@@ -466,17 +478,55 @@ export class VoxelWorld {
     
     // Now check each voxel for support and apply physics if needed
     for (const { pos, material } of voxelsToCheck) {
-      if (!this.hasSupport(pos)) {
+      // For wood blocks (tree trunks), specifically check the support chain
+      if (material === VoxelMaterial.WOOD) {
+        // Check if this wood block has a support chain to the ground
+        if (!this.hasWoodSupportChain(pos)) {
+          // No support chain - convert to a physical object
+          this.setVoxel(pos, undefined);
+          const physicsObj = this.createDynamicVoxelBody(pos, material);
+          this.physicsWorld.addBody(physicsObj);
+        }
+      } 
+      // For other materials, use the regular support check
+      else if (!this.hasSupport(pos)) {
         // Voxel has no support - convert to a physical object
-        
-        // Remove the static voxel from the world
         this.setVoxel(pos, undefined);
-        
-        // Create a dynamic physics object for this voxel
         const physicsObj = this.createDynamicVoxelBody(pos, material);
-        
-        // Add to physics world
         this.physicsWorld.addBody(physicsObj);
+      }
+    }
+  }
+  
+  // Check if a wood block has a continuous chain of support to the ground
+  private hasWoodSupportChain(startPos: VoxelCoord): boolean {
+    // Track visited positions to avoid loops
+    const visited = new Set<string>();
+    
+    // Start with the given position
+    let currentPos = { ...startPos };
+    
+    // Continue checking downward until we reach the ground or run out of wood blocks
+    while (true) {
+      // Mark current position as visited
+      visited.add(getVoxelKey(currentPos));
+      
+      // We reached ground level - the chain is supported
+      if (currentPos.y === 0) {
+        return true;
+      }
+      
+      // Check the block directly below
+      const belowPos = { x: currentPos.x, y: currentPos.y - 1, z: currentPos.z };
+      const belowMaterial = this.getVoxel(belowPos);
+      
+      // If there's a block below (any solid block), continue the chain downward
+      if (belowMaterial !== undefined) {
+        // Move down to continue the chain
+        currentPos = belowPos;
+      } else {
+        // No support below this point - the chain is broken
+        return false;
       }
     }
   }
@@ -497,30 +547,33 @@ export class VoxelWorld {
       return true;
     }
     
-    // For leaves and similar blocks, check if connected to a non-leaf block horizontally
-    // This better represents how tree leaves are connected to branches
+    // For wood blocks in trees, we need to check if they're part of the tree trunk
+    // If they're not directly on top of another wood block, they should fall
     const material = this.getVoxel(voxelPos);
+    
+    if (material === VoxelMaterial.WOOD) {
+      // For wood blocks, they need to have support directly underneath
+      // Otherwise, this is a disconnected wood block (like the top of a tree)
+      return false;
+    }
+    
+    // For leaves, check horizontal connections
     if (material === VoxelMaterial.LEAVES) {
-      // Check all four horizontal neighbors
-      const neighbors = [
-        { x: voxelPos.x + 1, y: voxelPos.y, z: voxelPos.z },
-        { x: voxelPos.x - 1, y: voxelPos.y, z: voxelPos.z },
-        { x: voxelPos.x, y: voxelPos.y, z: voxelPos.z + 1 },
-        { x: voxelPos.x, y: voxelPos.y, z: voxelPos.z - 1 }
-      ];
+      // Check all six neighboring positions
+      const neighbors = getVoxelNeighbors(voxelPos);
       
       for (const neighbor of neighbors) {
         const neighborMaterial = this.getVoxel(neighbor);
+        
         // If there's a wood block next to this leaf, consider it supported
         if (neighborMaterial === VoxelMaterial.WOOD) {
           return true;
         }
         
-        // Or if there's any other solid block (might be another leaf that's supported)
-        if (neighborMaterial !== undefined) {
-          // Recursively check if this neighbor has support
-          // But limit recursion depth to prevent infinite loops
-          if (this.hasRecursiveSupport(neighbor, 3)) {
+        // Check if it's connected to another leaf that might be supported
+        if (neighborMaterial === VoxelMaterial.LEAVES) {
+          // Use a breadth-first search to find if any connected leaf has support
+          if (this.hasLeafClusterSupport(voxelPos)) {
             return true;
           }
         }
@@ -530,45 +583,62 @@ export class VoxelWorld {
     return false;
   }
   
-  // Check if a voxel has support with limited recursion
-  private hasRecursiveSupport(voxelPos: VoxelCoord, depth: number): boolean {
-    if (depth <= 0) return false;
+  // Use breadth-first search to find if a cluster of leaves has any support
+  private hasLeafClusterSupport(startPos: VoxelCoord): boolean {
+    const visited = new Set<string>();
+    const queue: VoxelCoord[] = [startPos];
     
-    // Check below
-    const belowPos: VoxelCoord = { x: voxelPos.x, y: voxelPos.y - 1, z: voxelPos.z };
-    const belowVoxel = this.getVoxel(belowPos);
-    if (belowVoxel !== undefined) return true;
+    // Limit search to prevent infinite loops for very large trees
+    const maxSearchSize = 100;
     
-    // Ground level always counts as supported
-    if (voxelPos.y === 0) return true;
-    
-    // For horizontal recursion, only continue if we're checking another leaf connected to a leaf
-    const material = this.getVoxel(voxelPos);
-    if (material === VoxelMaterial.LEAVES) {
-      // Check horizontal neighbors
-      const neighbors = [
-        { x: voxelPos.x + 1, y: voxelPos.y, z: voxelPos.z },
-        { x: voxelPos.x - 1, y: voxelPos.y, z: voxelPos.z },
-        { x: voxelPos.x, y: voxelPos.y, z: voxelPos.z + 1 },
-        { x: voxelPos.x, y: voxelPos.y, z: voxelPos.z - 1 }
-      ];
+    while (queue.length > 0 && visited.size < maxSearchSize) {
+      const current = queue.shift()!;
+      const key = getVoxelKey(current);
       
-      for (const neighbor of neighbors) {
-        const neighborMaterial = this.getVoxel(neighbor);
-        // If there's a wood block, immediate support
-        if (neighborMaterial === VoxelMaterial.WOOD) {
+      if (visited.has(key)) continue;
+      visited.add(key);
+      
+      // Check if this leaf has support from below
+      const belowPos: VoxelCoord = { x: current.x, y: current.y - 1, z: current.z };
+      const belowMaterial = this.getVoxel(belowPos);
+      
+      // If there's something directly below, check if it's supporting
+      if (belowMaterial !== undefined) {
+        // If it's a wood block, check if it has a support chain to the ground
+        if (belowMaterial === VoxelMaterial.WOOD) {
+          if (this.hasWoodSupportChain(belowPos)) {
+            return true; // Found support from a supported wood block
+          }
+        } 
+        // If it's another material (like ground), it's supporting
+        else if (belowMaterial !== VoxelMaterial.LEAVES) {
           return true;
         }
+      }
+      
+      // Add all neighboring leaves/wood to the queue
+      const neighbors = getVoxelNeighbors(current);
+      for (const neighbor of neighbors) {
+        const neighborMaterial = this.getVoxel(neighbor);
         
-        // If it's another leaf, check its support with reduced depth
+        // If there's a wood block, check if it's actually supported
+        if (neighborMaterial === VoxelMaterial.WOOD) {
+          if (this.hasWoodSupportChain(neighbor)) {
+            return true; // Found support from a supported wood block
+          }
+        }
+        
+        // If it's another leaf, add to the queue to check later
         if (neighborMaterial === VoxelMaterial.LEAVES) {
-          if (this.hasRecursiveSupport(neighbor, depth - 1)) {
-            return true;
+          const neighborKey = getVoxelKey(neighbor);
+          if (!visited.has(neighborKey)) {
+            queue.push(neighbor);
           }
         }
       }
     }
     
+    // No support found in the cluster
     return false;
   }
   
