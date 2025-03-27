@@ -32,7 +32,6 @@ export class VoxelWorld {
   private scene: THREE.Scene;
   private chunks: Map<string, Chunk> = new Map();
   private physicsWorld: PhysicsWorld;
-  private world: RAPIER.World;
   private config: GameConfig;
   private materialMeshes: THREE.MeshStandardMaterial[] = [];
   private geometry: THREE.BoxGeometry;
@@ -62,121 +61,6 @@ export class VoxelWorld {
       });
   }
 
-  // Generate a simple flat terrain with some hills
-  generateTerrain(sizeInChunks: number): void {
-    const noiseScale = 0.05;
-    const heightScale = 10;
-
-    // Generate terrain in a square around the center
-    for (let cx = -sizeInChunks; cx < sizeInChunks; cx++) {
-      for (let cz = -sizeInChunks; cz < sizeInChunks; cz++) {
-        const chunkPos = { x: cx, y: 0, z: cz };
-        const chunk = this.getOrCreateChunk(chunkPos);
-
-        // Generate terrain for this chunk
-        for (let x = 0; x < CHUNK_SIZE; x++) {
-          for (let z = 0; z < CHUNK_SIZE; z++) {
-            // Calculate world position for this voxel
-            const worldX = chunkPos.x * CHUNK_SIZE + x;
-            const worldZ = chunkPos.z * CHUNK_SIZE + z;
-
-            // Simple Perlin-like noise function for height
-            const height = Math.floor(
-              (Math.sin(worldX * noiseScale) + Math.cos(worldZ * noiseScale)) * heightScale / 2 +
-              heightScale / 2
-            );
-
-            // Create terrain columns
-            for (let y = 0; y < height; y++) {
-              const voxelPos: VoxelCoord = {
-                x: worldX,
-                y: y,
-                z: worldZ
-              };
-
-              // Determine material type based on height
-              let material: VoxelMaterial;
-              if (y === height - 1 && y > 4) {
-                material = VoxelMaterial.GRASS; // Top layer is grass
-              } else if (y > height - 4) {
-                material = VoxelMaterial.DIRT; // Next layer is dirt
-              } else if (y > 2) {
-                material = VoxelMaterial.STONE; // Lower layers are stone
-              } else {
-                material = VoxelMaterial.SAND; // Bottom is sand
-              }
-
-              // Set voxel in chunk
-              this.setVoxel(voxelPos, material);
-            }
-          }
-        }
-
-        // Generate some trees randomly
-        if (Math.random() < 0.2) {
-          const treeBaseX = Math.floor(Math.random() * CHUNK_SIZE);
-          const treeBaseZ = Math.floor(Math.random() * CHUNK_SIZE);
-          const worldX = chunkPos.x * CHUNK_SIZE + treeBaseX;
-          const worldZ = chunkPos.z * CHUNK_SIZE + treeBaseZ;
-
-          // Find the surface Y position
-          const surfaceY = this.findHighestVoxel(worldX, worldZ);
-          if (surfaceY > 0) {
-            this.generateTree({ x: worldX, y: surfaceY, z: worldZ });
-          }
-        }
-      }
-    }
-
-    // Render all chunks
-    this.renderAllChunks();
-  }
-
-  // Find the highest voxel at the given X,Z position
-  private findHighestVoxel(x: number, z: number): number {
-    let y = 64; // Search from a high position down
-    while (y >= 0) {
-      const voxelPos: VoxelCoord = { x, y, z };
-      const voxel = this.getVoxel(voxelPos);
-      if (voxel !== undefined) {
-        return y + 1; // Return one above the found voxel
-      }
-      y--;
-    }
-    return 0; // Default ground level
-  }
-
-  // Generate a simple tree
-  private generateTree(base: VoxelCoord): void {
-    const treeHeight = 4 + Math.floor(Math.random() * 3); // 4-6 blocks high
-
-    // Create trunk
-    for (let y = 0; y < treeHeight; y++) {
-      this.setVoxel({ x: base.x, y: base.y + y, z: base.z }, VoxelMaterial.WOOD);
-    }
-
-    // Create leaves
-    const leavesRadius = 2;
-    for (let x = -leavesRadius; x <= leavesRadius; x++) {
-      for (let y = -1; y <= 2; y++) {
-        for (let z = -leavesRadius; z <= leavesRadius; z++) {
-          // Skip the trunk
-          if (x === 0 && z === 0 && y < 2) continue;
-
-          // Make leaves blob-shaped by checking distance from center
-          const distSq = x * x + y * y * 2 + z * z;
-          if (distSq <= leavesRadius * leavesRadius) {
-            const leafPos: VoxelCoord = {
-              x: base.x + x,
-              y: base.y + treeHeight - 1 + y,
-              z: base.z + z
-            };
-            this.setVoxel(leafPos, VoxelMaterial.LEAVES);
-          }
-        }
-      }
-    }
-  }
 
   // Get or create a chunk at the specified position
   getOrCreateChunk(position: { x: number, y: number, z: number }): Chunk {
@@ -234,7 +118,7 @@ export class VoxelWorld {
       // Remove physics body if it exists
       if (chunk.physicsObjects.has(key)) {
         const gameObj = chunk.physicsObjects.get(key)!;
-        this.world.removeRigidBody(gameObj.body);
+        this.physicsWorld.removeBody(gameObj);
         chunk.physicsObjects.delete(key);
       }
     } else {
@@ -280,7 +164,7 @@ export class VoxelWorld {
 
     // Clear existing physics objects
     for (const gameObj of chunk.physicsObjects.values()) {
-      this.world.removeRigidBody(gameObj.body);
+      this.physicsWorld.removeBody(gameObj);
     }
     chunk.physicsObjects.clear();
 
@@ -334,26 +218,25 @@ export class VoxelWorld {
           const body = createObstacleBody(
             { width: VOXEL_SIZE, height: VOXEL_SIZE, depth: VOXEL_SIZE },
             { x: worldPos.x, y: worldPos.y, z: worldPos.z },
-            this.world,
+            this.physicsWorld.world,
             0, // Static body
           );
 
           // Get all colliders on this body to update their properties
-          // Get all colliders on this body to update their properties
-          for (let j = 0; j < body.numColliders(); j++) {
-            const rapierCollider = body.collider(j);
-            const collider = this.world.getCollider(rapierCollider.handle);
+          // for (let j = 0; j < body.numColliders(); j++) {
+          //   const rapierCollider = body.collider(j);
+          //   const collider = this.physicsWorld.world.getCollider(rapierCollider.handle);
 
-            // Make sure collider is solid for player collisions
-            collider.setSensor(false);
+          //   // Make sure collider is solid for player collisions
+          //   collider.setSensor(false);
 
-            // Set material properties based on voxel type
-            collider.setFriction(voxelProps.friction);
-            collider.setRestitution(voxelProps.restitution);
+          //   // Set material properties based on voxel type
+          //   collider.setFriction(voxelProps.friction);
+          //   collider.setRestitution(voxelProps.restitution);
 
-            // Enable collision events
-            collider.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS);
-          }
+          //   // Enable collision events
+          //   collider.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS);
+          // }
 
           // Store physics body
           const gameObj: GameObject = {
@@ -402,20 +285,13 @@ export class VoxelWorld {
     return false;
   }
 
-  // Render all dirty chunks
-  renderAllChunks(): void {
+  // Update function to be called every frame
+  update(deltaTime: number): void {
     for (const chunk of this.chunks.values()) {
       if (chunk.dirty) {
         this.renderChunk(chunk);
       }
     }
-  }
-
-  // Update function to be called every frame
-  update(deltaTime: number): void {
-    // Render dirty chunks
-    this.renderAllChunks();
-
     // Apply gravity to voxels if needed
     // (Optional) Simulate falling sand, water flow, etc.
   }

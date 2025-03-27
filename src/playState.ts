@@ -53,7 +53,7 @@ export class PlayState implements IGameState {
 
     this.gameStateManager = gameStateManager;
     this.physicsWorld = new PhysicsWorld(this.config);
-    this.voxelWorld = new VoxelWorld(this.scene, this.physicsWorld.world, this.config);
+    this.voxelWorld = new VoxelWorld(this.scene, this.physicsWorld, this.config);
     this.initializeGameObjects(this.config);
 
     // Set up camera with increased far plane and narrower FOV for first person view
@@ -1334,13 +1334,8 @@ export class PlayState implements IGameState {
       const x = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
 
-      // Find terrain height at this position
-      const groundY = 0;
-
-      if (groundY !== null) {
         // Create a building on this spot
-        createBuilding(this.voxelWorld, x, groundY, z);
-      }
+        createBuilding(this.voxelWorld, x, z);
     }
 
     // Create some barricades/barriers
@@ -1350,7 +1345,7 @@ export class PlayState implements IGameState {
       const x = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
 
-      createBarrier(this.voxelWorld, x, 0.4, z);
+      createBarrier(this.voxelWorld, x, z);
     }
 
     // Add trees to the world (both regular and pine trees)
@@ -1365,9 +1360,9 @@ export class PlayState implements IGameState {
 
       // Decide between regular and pine trees
       if (Math.random() > 0.5) {
-        createTree(this.voxelWorld, x, 0, z);
+        createTree(this.voxelWorld, x, z);
       } else {
-        createPineTree(this.voxelWorld, x, 0, z);
+        createPineTree(this.voxelWorld, x, z);
       }
     }
 
@@ -1377,7 +1372,7 @@ export class PlayState implements IGameState {
       const x = Math.floor((Math.random() * (halfWorldSize * 1.9)) - (halfWorldSize * 0.95));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.9)) - (halfWorldSize * 0.95));
 
-      createBush(this.voxelWorld, x, 0, z);
+      createBush(this.voxelWorld, x, z);
     }
 
     // Add rock formations
@@ -1386,7 +1381,7 @@ export class PlayState implements IGameState {
       const x = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
 
-      createRockFormation(this.voxelWorld, x, 0, z);
+      createRockFormation(this.voxelWorld, x,  z);
     }
 
     // Add a few cacti in certain areas (to create desert-like regions)
@@ -1402,7 +1397,7 @@ export class PlayState implements IGameState {
       const x = Math.floor(desertCenterX + Math.cos(angle) * distance);
       const z = Math.floor(desertCenterZ + Math.sin(angle) * distance);
 
-      createCactus(this.voxelWorld, x, 0, z);
+      createCactus(this.voxelWorld, x, z);
     }
 
     // Add a few ponds
@@ -1415,11 +1410,11 @@ export class PlayState implements IGameState {
       const distanceFromOrigin = Math.sqrt(x * x + z * z);
       if (distanceFromOrigin < 30) continue;
 
-      createPond(this.voxelWorld, x, 0, z);
+      createPond(this.voxelWorld, x, z);
     }
 
     // Create a larger central structure/fortress
-    createFortress(this.voxelWorld, 0, 0.4, 0);
+    createFortress(this.voxelWorld, 0, 0);
   }
 
 

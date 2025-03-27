@@ -4,7 +4,9 @@ import { VoxelWorld } from './voxelWorld';
 /**
  * Creates a voxel building at the specified position
  */
-export function createBuilding(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+export function createBuilding(voxelWorld: VoxelWorld, x: number, z: number): void {
+    const groundY = voxelWorld.findSurfaceHeight(x, z);
+
     // Random building dimensions
     const width = 3 + Math.floor(Math.random() * 4);
     const depth = 3 + Math.floor(Math.random() * 4);
@@ -24,7 +26,7 @@ export function createBuilding(voxelWorld: VoxelWorld, x: number, y: number, z: 
                 if (dx === 0 || dx === width - 1 || dz === 0 || dz === depth - 1 || dy === 0 || dy === height - 1) {
                     voxelWorld.setVoxel({
                         x: x + dx,
-                        y: y + dy + 1, // +1 to start above ground level
+                        y: groundY + dy,
                         z: z + dz
                     }, material);
                 }
@@ -57,8 +59,8 @@ export function createBuilding(voxelWorld: VoxelWorld, x: number, y: number, z: 
 
     // Create a door (empty space)
     if (doorX !== undefined && doorZ !== undefined) {
-        voxelWorld.setVoxel({ x: doorX, y: y + 1, z: doorZ }, undefined);
-        voxelWorld.setVoxel({ x: doorX, y: y + 2, z: doorZ }, undefined);
+        voxelWorld.setVoxel({ x: doorX, y: groundY, z: doorZ }, undefined);
+        voxelWorld.setVoxel({ x: doorX, y: groundY + 1, z: doorZ }, undefined);
     }
 
     // Add windows (randomly)
@@ -90,7 +92,7 @@ export function createBuilding(voxelWorld: VoxelWorld, x: number, y: number, z: 
 
         if (windowX !== undefined && windowZ !== undefined) {
             // Window height is usually in the middle of the wall
-            const windowY = y + Math.floor(height / 2);
+            const windowY = groundY + Math.floor(height / 2);
             voxelWorld.setVoxel({ x: windowX, y: windowY, z: windowZ }, undefined);
         }
     }
@@ -99,22 +101,23 @@ export function createBuilding(voxelWorld: VoxelWorld, x: number, y: number, z: 
 /**
  * Creates a barrier/barricade at the specified position
  */
-export function createBarrier(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+export function createBarrier(voxelWorld: VoxelWorld, x: number, z: number): void {
     // Randomly choose between several barrier types
     const barrierType = Math.floor(Math.random() * 4);
+    const groundY = voxelWorld.findSurfaceHeight(x, z);
 
     switch (barrierType) {
         case 0: // Sandbag wall
-            createSandbagWall(voxelWorld, x, y, z);
+            createSandbagWall(voxelWorld, x, groundY, z);
             break;
         case 1: // Concrete barriers
-            createConcreteBarriers(voxelWorld, x, y, z);
+            createConcreteBarriers(voxelWorld, x, groundY, z);
             break;
         case 2: // Metal barricade
-            createMetalBarricade(voxelWorld, x, y, z);
+            createMetalBarricade(voxelWorld, x, groundY, z);
             break;
         case 3: // Wooden fence
-            createWoodenFence(voxelWorld, x, y, z);
+            createWoodenFence(voxelWorld, x, groundY, z);
             break;
     }
 }
@@ -129,9 +132,9 @@ export function createSandbagWall(voxelWorld: VoxelWorld, x: number, y: number, 
     for (let i = 0; i < length; i++) {
         for (let h = 0; h < 2; h++) { // 2 sandbags high
             if (direction === 'x') {
-                voxelWorld.setVoxel({ x: x + i, y: y + h + 1, z }, VoxelMaterial.SAND);
+                voxelWorld.setVoxel({ x: x + i, y: y + h, z }, VoxelMaterial.SAND);
             } else {
-                voxelWorld.setVoxel({ x, y: y + h + 1, z: z + i }, VoxelMaterial.SAND);
+                voxelWorld.setVoxel({ x, y: y + h, z: z + i }, VoxelMaterial.SAND);
             }
         }
     }
@@ -147,11 +150,11 @@ export function createConcreteBarriers(voxelWorld: VoxelWorld, x: number, y: num
     for (let i = 0; i < length; i++) {
         if (Math.random() > 0.2) { // 80% chance to place a barrier (creates gaps)
             if (direction === 'x') {
+                voxelWorld.setVoxel({ x: x + i, y: y , z }, VoxelMaterial.CONCRETE);
                 voxelWorld.setVoxel({ x: x + i, y: y + 1, z }, VoxelMaterial.CONCRETE);
-                voxelWorld.setVoxel({ x: x + i, y: y + 2, z }, VoxelMaterial.CONCRETE);
             } else {
+                voxelWorld.setVoxel({ x, y: y , z: z + i }, VoxelMaterial.CONCRETE);
                 voxelWorld.setVoxel({ x, y: y + 1, z: z + i }, VoxelMaterial.CONCRETE);
-                voxelWorld.setVoxel({ x, y: y + 2, z: z + i }, VoxelMaterial.CONCRETE);
             }
         }
     }
@@ -166,18 +169,18 @@ export function createMetalBarricade(voxelWorld: VoxelWorld, x: number, y: numbe
 
     for (let i = 0; i < length; i++) {
         if (direction === 'x') {
-            voxelWorld.setVoxel({ x: x + i, y: y + 1, z }, VoxelMaterial.METAL);
+            voxelWorld.setVoxel({ x: x + i, y: y, z }, VoxelMaterial.METAL);
             // Add vertical supports every few blocks
             if (i % 2 === 0) {
+                voxelWorld.setVoxel({ x: x + i, y: y + 1, z }, VoxelMaterial.METAL);
                 voxelWorld.setVoxel({ x: x + i, y: y + 2, z }, VoxelMaterial.METAL);
-                voxelWorld.setVoxel({ x: x + i, y: y + 3, z }, VoxelMaterial.METAL);
             }
         } else {
-            voxelWorld.setVoxel({ x, y: y + 1, z: z + i }, VoxelMaterial.METAL);
+            voxelWorld.setVoxel({ x, y: y , z: z + i }, VoxelMaterial.METAL);
             // Add vertical supports every few blocks
             if (i % 2 === 0) {
+                voxelWorld.setVoxel({ x, y: y + 1, z: z + i }, VoxelMaterial.METAL);
                 voxelWorld.setVoxel({ x, y: y + 2, z: z + i }, VoxelMaterial.METAL);
-                voxelWorld.setVoxel({ x, y: y + 3, z: z + i }, VoxelMaterial.METAL);
             }
         }
     }
@@ -194,19 +197,19 @@ export function createWoodenFence(voxelWorld: VoxelWorld, x: number, y: number, 
         if (direction === 'x') {
             // Fence posts
             if (i % 2 === 0) {
+                voxelWorld.setVoxel({ x: x + i, y: y , z }, VoxelMaterial.WOOD);
                 voxelWorld.setVoxel({ x: x + i, y: y + 1, z }, VoxelMaterial.WOOD);
-                voxelWorld.setVoxel({ x: x + i, y: y + 2, z }, VoxelMaterial.WOOD);
             }
             // Horizontal beam
-            voxelWorld.setVoxel({ x: x + i, y: y + 2, z }, VoxelMaterial.WOOD);
+            voxelWorld.setVoxel({ x: x + i, y: y + 1, z }, VoxelMaterial.WOOD);
         } else {
             // Fence posts
             if (i % 2 === 0) {
+                voxelWorld.setVoxel({ x, y: y , z: z + i }, VoxelMaterial.WOOD);
                 voxelWorld.setVoxel({ x, y: y + 1, z: z + i }, VoxelMaterial.WOOD);
-                voxelWorld.setVoxel({ x, y: y + 2, z: z + i }, VoxelMaterial.WOOD);
             }
             // Horizontal beam
-            voxelWorld.setVoxel({ x, y: y + 2, z: z + i }, VoxelMaterial.WOOD);
+            voxelWorld.setVoxel({ x, y: y + 1, z: z + i }, VoxelMaterial.WOOD);
         }
     }
 }
@@ -214,7 +217,8 @@ export function createWoodenFence(voxelWorld: VoxelWorld, x: number, y: number, 
 /**
  * Creates a central fortress structure
  */
-export function createFortress(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+export function createFortress(voxelWorld: VoxelWorld, x: number, z: number): void {
+    const groundY = voxelWorld.findSurfaceHeight(x, z);
     // Main fortress parameters
     const size = 10;
     const wallHeight = 6;
@@ -227,7 +231,7 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, y: number, z: 
                 for (let dy = 0; dy < wallHeight; dy++) {
                     voxelWorld.setVoxel({
                         x: x + dx - Math.floor(size / 2),
-                        y: y + dy + 1,
+                        y: groundY + dy,
                         z: z + dz - Math.floor(size / 2)
                     }, VoxelMaterial.STONE);
                 }
@@ -251,7 +255,7 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, y: number, z: 
                 for (let tz = 0; tz < 2; tz++) {
                     voxelWorld.setVoxel({
                         x: x + corner.dx + (corner.dx === 0 ? -tx : tx) - Math.floor(size / 2),
-                        y: y + dy + 1,
+                        y: groundY + dy,
                         z: z + corner.dz + (corner.dz === 0 ? -tz : tz) - Math.floor(size / 2)
                     }, VoxelMaterial.STONE);
                 }
@@ -269,7 +273,7 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, y: number, z: 
 
                     voxelWorld.setVoxel({
                         x: x + corner.dx + (corner.dx === 0 ? tx : tx) - Math.floor(size / 2),
-                        y: y + towerHeight + 1,
+                        y: groundY + towerHeight,
                         z: z + corner.dz + (corner.dz === 0 ? tz : tz) - Math.floor(size / 2)
                     }, VoxelMaterial.STONE);
                 }
@@ -288,8 +292,8 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, y: number, z: 
 
             // Create opening
             for (let dy = 1; dy <= 3; dy++) {
-                voxelWorld.setVoxel({ x: entranceX, y: y + dy, z: entranceZ }, undefined);
-                voxelWorld.setVoxel({ x: entranceX + 1, y: y + dy, z: entranceZ }, undefined);
+                voxelWorld.setVoxel({ x: entranceX, y: groundY + dy, z: entranceZ }, undefined);
+                voxelWorld.setVoxel({ x: entranceX + 1, y: groundY + dy, z: entranceZ }, undefined);
             }
             break;
 
@@ -299,8 +303,8 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, y: number, z: 
 
             // Create opening
             for (let dy = 1; dy <= 3; dy++) {
-                voxelWorld.setVoxel({ x: entranceX, y: y + dy, z: entranceZ }, undefined);
-                voxelWorld.setVoxel({ x: entranceX, y: y + dy, z: entranceZ + 1 }, undefined);
+                voxelWorld.setVoxel({ x: entranceX, y: groundY + dy, z: entranceZ }, undefined);
+                voxelWorld.setVoxel({ x: entranceX, y: groundY + dy, z: entranceZ + 1 }, undefined);
             }
             break;
 
@@ -310,8 +314,8 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, y: number, z: 
 
             // Create opening
             for (let dy = 1; dy <= 3; dy++) {
-                voxelWorld.setVoxel({ x: entranceX, y: y + dy, z: entranceZ }, undefined);
-                voxelWorld.setVoxel({ x: entranceX + 1, y: y + dy, z: entranceZ }, undefined);
+                voxelWorld.setVoxel({ x: entranceX, y: groundY + dy, z: entranceZ }, undefined);
+                voxelWorld.setVoxel({ x: entranceX + 1, y: groundY + dy, z: entranceZ }, undefined);
             }
             break;
 
@@ -321,54 +325,17 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, y: number, z: 
 
             // Create opening
             for (let dy = 1; dy <= 3; dy++) {
-                voxelWorld.setVoxel({ x: entranceX, y: y + dy, z: entranceZ }, undefined);
-                voxelWorld.setVoxel({ x: entranceX, y: y + dy, z: entranceZ + 1 }, undefined);
+                voxelWorld.setVoxel({ x: entranceX, y: groundY + dy, z: entranceZ }, undefined);
+                voxelWorld.setVoxel({ x: entranceX, y: groundY + dy, z: entranceZ + 1 }, undefined);
             }
             break;
     }
-
-    // Create central building
-    const innerSize = 5;
-    const innerX = x - Math.floor(innerSize / 2);
-    const innerZ = z - Math.floor(innerSize / 2);
-
-    for (let dx = 0; dx < innerSize; dx++) {
-        for (let dz = 0; dz < innerSize; dz++) {
-            if (dx === 0 || dx === innerSize - 1 || dz === 0 || dz === innerSize - 1) {
-                for (let dy = 0; dy < 4; dy++) {
-                    voxelWorld.setVoxel({
-                        x: innerX + dx,
-                        y: y + dy + 1,
-                        z: innerZ + dz
-                    }, VoxelMaterial.BRICK);
-                }
-            }
-        }
-    }
-
-    // Add roof to central building
-    for (let dx = -1; dx <= innerSize; dx++) {
-        for (let dz = -1; dz <= innerSize; dz++) {
-            voxelWorld.setVoxel({
-                x: innerX + dx,
-                y: y + 5,
-                z: innerZ + dz
-            }, VoxelMaterial.METAL);
-        }
-    }
-
-    // Add a door to the central building
-    const innerEntranceX = innerX + Math.floor(innerSize / 2);
-    const innerEntranceZ = innerZ;
-
-    voxelWorld.setVoxel({ x: innerEntranceX, y: y + 1, z: innerEntranceZ }, undefined);
-    voxelWorld.setVoxel({ x: innerEntranceX, y: y + 2, z: innerEntranceZ }, undefined);
 }
 
 /**
  * Creates a tree at the specified position
  */
-export function createTree(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+export function createTree(voxelWorld: VoxelWorld, x: number, z: number): void {
     // Find proper ground height
     const groundY = voxelWorld.findSurfaceHeight(x, z);
     
@@ -414,7 +381,7 @@ export function createTree(voxelWorld: VoxelWorld, x: number, y: number, z: numb
 /**
  * Creates a pine tree (conical) at the specified position
  */
-export function createPineTree(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+export function createPineTree(voxelWorld: VoxelWorld, x: number, z: number): void {
     // Find proper ground height
     const groundY = voxelWorld.findSurfaceHeight(x, z);
     
@@ -465,7 +432,7 @@ export function createPineTree(voxelWorld: VoxelWorld, x: number, y: number, z: 
 /**
  * Creates a bush at the specified position
  */
-export function createBush(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+export function createBush(voxelWorld: VoxelWorld, x: number, z: number): void {
     // Find proper ground height
     const groundY = voxelWorld.findSurfaceHeight(x, z);
     
@@ -496,7 +463,7 @@ export function createBush(voxelWorld: VoxelWorld, x: number, y: number, z: numb
 /**
  * Creates a rock formation at the specified position
  */
-export function createRockFormation(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+export function createRockFormation(voxelWorld: VoxelWorld, x: number, z: number): void {
     // Find proper ground height
     const groundY = voxelWorld.findSurfaceHeight(x, z);
     
@@ -527,7 +494,7 @@ export function createRockFormation(voxelWorld: VoxelWorld, x: number, y: number
 /**
  * Creates a cactus at the specified position
  */
-export function createCactus(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+export function createCactus(voxelWorld: VoxelWorld, x: number, z: number): void {
     // Find proper ground height
     const groundY = voxelWorld.findSurfaceHeight(x, z);
     
@@ -570,7 +537,7 @@ export function createCactus(voxelWorld: VoxelWorld, x: number, y: number, z: nu
 /**
  * Creates a small pond of water at the specified position
  */
-export function createPond(voxelWorld: VoxelWorld, x: number, y: number, z: number): void {
+export function createPond(voxelWorld: VoxelWorld, x: number, z: number): void {
     // Find proper ground height
     const groundY = voxelWorld.findSurfaceHeight(x, z);
     
