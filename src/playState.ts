@@ -29,6 +29,9 @@ export class PlayState implements IGameState {
   prevWireframeState: boolean = false;
   input?: InputState;
   config: GameConfig;
+  // Add a cooldown period to prevent firing on game start
+  private inputCooldownActive: boolean = true;
+  private inputCooldownTimer: number | null = null;
 
   // Level progression properties
   currentLevel: number = 1;
@@ -205,6 +208,13 @@ export class PlayState implements IGameState {
 
   handleInput(input: InputState): void {
     const soundManager = this.gameStateManager.initSoundManager();
+    
+    // Ignore firing input if we're in the cooldown period after starting the game
+    if (this.inputCooldownActive) {
+      // Temporarily disable firing but keep other inputs active
+      input = { ...input, fire: false };
+    }
+    
     // Only process tank movement controls if not in fly mode
     if (!this.flyCamera.isEnabled()) {
       if (input.forward) {
@@ -870,6 +880,20 @@ export class PlayState implements IGameState {
 
     // Initialize health display
     this.showHealthNotification();
+
+    // Enable the input cooldown to prevent accidental firing on game start
+    this.inputCooldownActive = true;
+    
+    // Clear any existing timer
+    if (this.inputCooldownTimer !== null) {
+      clearTimeout(this.inputCooldownTimer);
+    }
+    
+    // Set timer to disable the cooldown after a short delay
+    this.inputCooldownTimer = window.setTimeout(() => {
+      this.inputCooldownActive = false;
+      this.inputCooldownTimer = null;
+    }, 500); // 500ms should be enough to prevent accidental clicks from starting UI
 
     const instructions = document.getElementById('instructions');
     if (instructions) {

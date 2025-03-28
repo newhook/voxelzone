@@ -140,6 +140,8 @@ export class VoxelWorld {
 
     // Check for unsupported voxels if we removed a voxel
     if (isRemoving) {
+      // console.trace();
+      // console.log("Checking for unsupported voxels...");
       // Regular handling for other materials
       setTimeout(() => {
         this.checkUnsupportedVoxels(voxelPos, 3);
@@ -230,13 +232,12 @@ export class VoxelWorld {
           if (voxelProps.fixed) {
             // Use fixed rigid body for voxels marked as fixed
             rigidBodyDesc = RAPIER.RigidBodyDesc.fixed()
-              .setTranslation(worldPos.x, worldPos.y, worldPos.z);
           } else {
             // Use static body for normal voxels
             rigidBodyDesc = RAPIER.RigidBodyDesc.fixed()
-              .setTranslation(worldPos.x, worldPos.y, worldPos.z);
           }
-          
+          rigidBodyDesc = rigidBodyDesc.setTranslation(worldPos.x, worldPos.y, worldPos.z);
+
           const body = this.physicsWorld.world.createRigidBody(rigidBodyDesc);
 
           // Create the collider
@@ -265,7 +266,7 @@ export class VoxelWorld {
           const gameObj: GameObject = {
             mesh: null as any, // We don't need a reference to the mesh
             body,
-            update: () => {} // No updates needed
+            update: () => { } // No updates needed
           };
 
           // Register the voxel with physics world to enable proper collision tracking

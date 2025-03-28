@@ -68,7 +68,7 @@ export const voxelProperties: Record<VoxelMaterial, VoxelProperties> = {
     transparent: false,
     solid: true,
     breakable: true,
-    gravity: true,
+    gravity: false,
     friction: 0.9,
     restitution: 0.05,
     fixed: true,
