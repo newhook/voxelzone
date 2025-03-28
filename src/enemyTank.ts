@@ -182,7 +182,7 @@ export class EnemyTank extends Tank {
       this.hasLineOfSight = this.checkLineOfSight(playerPosition, tankPosition);
 
       if (this.hasLineOfSight) {
-        console.log("Player in line of sight");
+        // console.log("Player in line of sight");
         // We can see the player, update the last known position
         this.playerLastKnownPosition = playerPosition.clone();
         this.trackingPlayer = true;

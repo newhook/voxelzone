@@ -14,11 +14,12 @@ import { createTerrain, createGround, createBoundaryWalls } from './gameObjects'
 import { createBarrier, createBuilding, createFortress, createTree, createBush, createPond, createPineTree, createCactus, createRockFormation } from './voxelObjects';
 
 export class PlayState implements IGameState {
-  private gameStateManager: GameStateManager;
+  public gameStateManager: GameStateManager;
   scene: THREE.Scene;
   physicsWorld: PhysicsWorld;
   private camera: THREE.PerspectiveCamera;
   player!: PlayerTank; // Using definite assignment assertion
+  debris: GameObject[] = [];
   enemies: Vehicle[] = [];
   terrain: GameObject[] = [];
   projectiles: GameObject[] = [];
@@ -57,7 +58,7 @@ export class PlayState implements IGameState {
 
     this.gameStateManager = gameStateManager;
     this.physicsWorld = new PhysicsWorld(this.config);
-    this.voxelWorld = new VoxelWorld(this.scene, this.physicsWorld, this.config);
+    this.voxelWorld = new VoxelWorld(this, this.scene, this.physicsWorld, this.config);
     this.initializeGameObjects(this.config);
 
     // Set up camera with increased far plane and narrower FOV for first person view
@@ -83,17 +84,17 @@ export class PlayState implements IGameState {
     // Add lighting
     const ambientLight = new THREE.AmbientLight(0x6b8cff, 4.0); // Increased from 2.0, with a blue tint
     this.scene.add(ambientLight);
-    
+
     // Main directional light (like the sun)
     const directionalLight = new THREE.DirectionalLight(0xffffcc, 2.5); // Increased from 1.5, warmer color
     directionalLight.position.set(100, 200, 100);
     directionalLight.castShadow = true;
     this.scene.add(directionalLight);
-    
+
     // Add a distant point light to simulate sky lighting
     const skyLight = new THREE.HemisphereLight(0x87ceeb, 0x648c4a, 2.0); // Sky blue and ground green
     this.scene.add(skyLight);
-    
+
     // Add a fill light from another angle to reduce harsh shadows
     const fillLight = new THREE.DirectionalLight(0xffffee, 1.0);
     fillLight.position.set(-100, 50, -50);
@@ -209,13 +210,13 @@ export class PlayState implements IGameState {
 
   handleInput(input: InputState): void {
     const soundManager = this.gameStateManager.initSoundManager();
-    
+
     // Ignore firing input if we're in the cooldown period after starting the game
     if (this.inputCooldownActive) {
       // Temporarily disable firing but keep other inputs active
       input = { ...input, fire: false };
     }
-    
+
     // Only process tank movement controls if not in fly mode
     if (!this.flyCamera.isEnabled()) {
       if (input.forward) {
@@ -264,7 +265,7 @@ export class PlayState implements IGameState {
       this.toggleWireframeMode(this.scene, input.wireframeToggle);
       this.prevWireframeState = input.wireframeToggle;
     }
-    
+
     // Check if debug physics toggle has been pressed
     if (input.debugPhysicsToggle !== this.prevDebugPhysicsState) {
       this.toggleDebugPhysics(input.debugPhysicsToggle);
@@ -443,101 +444,37 @@ export class PlayState implements IGameState {
         continue;
       }
 
-      this.checkProjectileCollisions(i, projectile);
-    }
-  }
-
-  private checkProjectileCollisions(projectileIndex: number, projectile: GameObject): void {
-    // Skip if this is not a proper Projectile instance
-    if (!(projectile instanceof Projectile)) return;
-
-    const projectilePos = projectile.body.translation();
-
-    // Create explosion radius for voxel destruction (destroy multiple voxels for more impact)
-    const explosionRadius = 1.5; // Radius in voxel units
-
-    // Convert projectile position to THREE.Vector3 for voxel world methods
-    const projectileVector = new THREE.Vector3(projectilePos.x, projectilePos.y, projectilePos.z);
-
-    // Check if projectile hit a voxel
-    const rayResult = this.voxelWorld.raycast(
-      projectileVector.clone().sub(new THREE.Vector3(0, 0, 0.1)), // Small offset to detect collision
-      new THREE.Vector3(0, 0, 1), // Direction doesn't matter for point check
-      explosionRadius // Use radius as max distance
-    );
-
-    if (rayResult.voxel) {
-      // Create explosion effect
-      this.createExplosion(projectilePos);
-
-      // Play explosion sound
-      const soundManager = this.gameStateManager.initSoundManager();
-      soundManager.playHit();
-
-      // Destroy voxels in a sphere around the impact point
-      for (let x = -Math.ceil(explosionRadius); x <= Math.ceil(explosionRadius); x++) {
-        for (let y = -Math.ceil(explosionRadius); y <= Math.ceil(explosionRadius); y++) {
-          for (let z = -Math.ceil(explosionRadius); z <= Math.ceil(explosionRadius); z++) {
-            const checkPos = {
-              x: rayResult.voxel.x + x,
-              y: rayResult.voxel.y + y,
-              z: rayResult.voxel.z + z
-            };
-
-            // Check if position is within explosion radius
-            const distance = Math.sqrt(x * x + y * y + z * z);
-            if (distance <= explosionRadius) {
-              // Remove the voxel
-              this.voxelWorld.setVoxel(checkPos, undefined);
-            }
-          }
-        }
-      }
-
-      // Remove the projectile
-      this.removeProjectile(projectileIndex);
-      return;
-    }
-
-    // Check for enemy collisions if it's a player projectile
-    if (projectile.source === ProjectileSource.PLAYER) {
-      for (let j = this.enemies.length - 1; j >= 0; j--) {
-        const enemy = this.enemies[j];
-        if (!enemy.body || !enemy.mesh) continue;
-
-        const enemyPos = enemy.body.translation();
-        const distance = Math.sqrt(
-          Math.pow(projectilePos.x - enemyPos.x, 2) +
-          Math.pow(projectilePos.y - enemyPos.y, 2) +
-          Math.pow(projectilePos.z - enemyPos.z, 2)
-        );
-
-        if (distance < 2) {
-          this.handleEnemyHit(j, enemyPos);
-          this.removeProjectile(projectileIndex);
-          break;
-        }
-      }
-    }
-    // Check for player collision if it's an enemy projectile
-    else if (projectile.source === ProjectileSource.ENEMY) {
-      if (!this.player.body || !this.player.mesh) return;
-
-      const playerPos = this.player.body.translation();
-      const distance = Math.sqrt(
-        Math.pow(projectilePos.x - playerPos.x, 2) +
-        Math.pow(projectilePos.y - playerPos.y, 2) +
-        Math.pow(projectilePos.z - playerPos.z, 2)
-      );
-
-      if (distance < 2) {
-        this.handlePlayerHit();
-        this.removeProjectile(projectileIndex);
+      // Physics-based collision detection is now handled by the Projectile class
+      // through the collision handler registered with the physics world
+      if (projectile.update) {
+        projectile.update();
       }
     }
   }
 
-  private handleEnemyHit(enemyIndex: number, enemyPos: { x: number, y: number, z: number }): void {
+  public handleDebrisHit(index: number, enemyPos: { x: number, y: number, z: number }): void {
+    const debris = this.debris[index];
+    const soundManager = this.gameStateManager.initSoundManager();
+    soundManager.playHit();
+
+    // Create hit explosion effect
+    this.createExplosion(enemyPos);
+
+    // Remove from array
+    this.debris.splice(index, 1);
+
+    // Remove the enemy from scene
+    if (debris.mesh.parent) {
+      debris.mesh.parent.remove(debris.mesh);
+    }
+
+    // Remove from physics world
+    if (debris.body) {
+      this.physicsWorld.removeBody(debris);
+    }
+  }
+
+  public handleEnemyHit(enemyIndex: number, enemyPos: { x: number, y: number, z: number }): void {
     const enemy = this.enemies[enemyIndex];
 
     const soundManager = this.gameStateManager.initSoundManager();
@@ -700,7 +637,7 @@ export class PlayState implements IGameState {
     }
   }
 
-  private handlePlayerHit(): void {
+  public handlePlayerHit(): void {
     // Flash the player tank to indicate damage and check if destroyed
     const isAlive = this.player.takeDamage(10);
     const soundManager = this.gameStateManager.initSoundManager();
@@ -890,12 +827,12 @@ export class PlayState implements IGameState {
 
     // Enable the input cooldown to prevent accidental firing on game start
     this.inputCooldownActive = true;
-    
+
     // Clear any existing timer
     if (this.inputCooldownTimer !== null) {
       clearTimeout(this.inputCooldownTimer);
     }
-    
+
     // Set timer to disable the cooldown after a short delay
     this.inputCooldownTimer = window.setTimeout(() => {
       this.inputCooldownActive = false;
@@ -938,6 +875,16 @@ export class PlayState implements IGameState {
     // Remove any on-screen feedback elements
     const feedbackElements = document.querySelectorAll('.game-feedback');
     feedbackElements.forEach(element => element.remove());
+  }
+
+  public addDebris(debris: GameObject): void {
+    this.physicsWorld.addBody(debris);
+    this.scene.add(debris.mesh);
+  }
+
+  public removeDebris(debris: GameObject): void {
+    this.scene.remove(debris.mesh);
+    this.physicsWorld.removeBody(debris);
   }
 
   setupInputHandlers(): InputState {
@@ -1375,8 +1322,8 @@ export class PlayState implements IGameState {
       const x = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
 
-        // Create a building on this spot
-        createBuilding(this.voxelWorld, x, z);
+      // Create a building on this spot
+      createBuilding(this.voxelWorld, x, z);
     }
 
     // Create some barricades/barriers
@@ -1422,7 +1369,7 @@ export class PlayState implements IGameState {
       const x = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
 
-      createRockFormation(this.voxelWorld, x,  z);
+      createRockFormation(this.voxelWorld, x, z);
     }
 
     // Add a few cacti in certain areas (to create desert-like regions)

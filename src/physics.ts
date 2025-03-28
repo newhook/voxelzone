@@ -5,6 +5,9 @@ import { GameConfig } from './config';
 export class PhysicsWorld implements PhysicsWorldType {
   world: RAPIER.World;
   bodies: GameObject[];
+  // Add collision event handler
+  eventQueue: RAPIER.EventQueue;
+  collisionHandlers: Map<number, (other: GameObject) => void>;
 
   constructor(config: GameConfig) {
     // Create a physics world
@@ -12,6 +15,9 @@ export class PhysicsWorld implements PhysicsWorldType {
     this.world = new RAPIER.World(gravity);
     this.world.timestep = 1/120; // 120 fps
     this.bodies = [];
+    // Initialize collision handling
+    this.eventQueue = new RAPIER.EventQueue(true);
+    this.collisionHandlers = new Map();
 
     // Create ground plane with configurable size
     const groundSize = config.worldSize / 2; // Divide by 2 since the size is total width
@@ -21,7 +27,10 @@ export class PhysicsWorld implements PhysicsWorldType {
 
   update(_deltaTime: number): void {
     // Step the physics simulation
-    this.world.step();
+    this.world.step(this.eventQueue);
+    
+    // Process collision events
+    this.processCollisionEvents();
     
     // Check for invalid bodies before updating
     const validBodies = this.bodies.filter(body => {
@@ -54,6 +63,69 @@ export class PhysicsWorld implements PhysicsWorldType {
     }
   }
 
+  // Process collision events from RAPIER
+  private processCollisionEvents(): void {
+    // this.world.contactPair(this.eventQueue);
+    
+    this.eventQueue.drainCollisionEvents((handle1, handle2, started) => {
+      if (started) {
+        const collider1 = this.world.getCollider(handle1);
+        const collider2 = this.world.getCollider(handle2);
+        
+        const parent1 = collider1.parent();
+        const parent2 = collider2.parent();
+        
+        if (parent1 && parent2) {
+          const body1Handle = parent1.handle;
+          const body2Handle = parent2.handle;
+          
+          // Find the GameObjects associated with these rigid bodies
+          const gameObj1 = this.findGameObjectByHandle(body1Handle);
+          const gameObj2 = this.findGameObjectByHandle(body2Handle);
+          
+          // Trigger collision handlers if they exist
+          if (gameObj1 && this.collisionHandlers.has(body1Handle)) {
+            const collider = this.collisionHandlers.get(body1Handle)
+            if (collider && gameObj2) {
+              // console.log("Collision detected between", gameObj1, "and", gameObj2);
+              collider(gameObj2);
+            }
+          }
+          if (gameObj2 && this.collisionHandlers.has(body2Handle)) {
+            let collider = this.collisionHandlers.get(body2Handle)
+            if (collider && gameObj1) {
+              // console.log("Collision detected between", gameObj1, "and", gameObj2);
+              collider(gameObj1);
+            }
+          }
+        }
+      }
+    });
+    
+    // Clear the event queue after processing
+    this.eventQueue.clear();
+  }
+
+  // Find a GameObject by its physics body handle
+  private findGameObjectByHandle(handle: number): GameObject | null {
+    for (const body of this.bodies) {
+      if (body.body.handle === handle) {
+        return body;
+      }
+    }
+    return null;
+  }
+
+  // Register a collision handler for a specific body
+  registerCollisionHandler(body: GameObject, handler: (other: GameObject) => void): void {
+    this.collisionHandlers.set(body.body.handle, handler);
+  }
+
+  // Unregister a collision handler
+  unregisterCollisionHandler(body: GameObject): void {
+    this.collisionHandlers.delete(body.body.handle);
+  }
+
   addBody(body: GameObject): void {
     this.bodies.push(body);
   }
@@ -63,10 +135,11 @@ export class PhysicsWorld implements PhysicsWorldType {
     if (index !== -1) {
       this.bodies.splice(index, 1);
       this.world.removeRigidBody(body.body);
+      // Remove any collision handlers
+      this.unregisterCollisionHandler(body);
     }
   }
 }
-
 
 export function createObstacleBody(
   size: { width: number, height: number, depth: number }, 
@@ -102,6 +175,7 @@ export function createObstacleBody(
   // Increase friction and make sure there's no bounce for obstacles
   colliderDesc.setFriction(1.0);
   colliderDesc.setRestitution(0.0);
+  colliderDesc.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.DEFAULT);
   
   // Add some contact force events for debugging if needed
   colliderDesc.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS);
