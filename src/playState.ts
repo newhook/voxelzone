@@ -27,6 +27,7 @@ export class PlayState implements IGameState {
   flyCamera: FlyCamera;
   radar: Radar;
   prevWireframeState: boolean = false;
+  private prevDebugPhysicsState: boolean = false;
   input?: InputState;
   config: GameConfig;
   // Add a cooldown period to prevent firing on game start
@@ -262,6 +263,12 @@ export class PlayState implements IGameState {
     if (input.wireframeToggle !== this.prevWireframeState) {
       this.toggleWireframeMode(this.scene, input.wireframeToggle);
       this.prevWireframeState = input.wireframeToggle;
+    }
+    
+    // Check if debug physics toggle has been pressed
+    if (input.debugPhysicsToggle !== this.prevDebugPhysicsState) {
+      this.toggleDebugPhysics(input.debugPhysicsToggle);
+      this.prevDebugPhysicsState = input.debugPhysicsToggle;
     }
   }
 
@@ -940,6 +947,7 @@ export class PlayState implements IGameState {
       left: false,
       right: false,
       fire: false,
+      debugPhysicsToggle: false,
       wireframeToggle: false,
       turretLeft: false,
       turretRight: false,
@@ -952,6 +960,9 @@ export class PlayState implements IGameState {
       switch (event.code) {
         case 'KeyR':
           input.wireframeToggle = !input.wireframeToggle;
+          break;
+        case 'KeyP':
+          input.debugPhysicsToggle = !input.debugPhysicsToggle;
           break;
         case 'KeyW':
           input.forward = true;
@@ -1345,7 +1356,7 @@ export class PlayState implements IGameState {
       levelNotification.style.opacity = '0';
       setTimeout(() => {
         if (levelNotification.parentNode) {
-          document.body.removeChild(levelNotification);
+          levelNotification.parentNode.removeChild(levelNotification);
         }
       }, 1000);
     }, 3000);
@@ -1478,5 +1489,36 @@ export class PlayState implements IGameState {
     }
 
     return true;
+  }
+
+  private toggleDebugPhysics(isDebugMode: boolean): void {
+    // Set debug mode in voxel world
+    this.voxelWorld.setDebugPhysics(isDebugMode);
+
+    // Create a notification about debug physics mode
+    const debugNotification = document.createElement('div');
+    debugNotification.style.position = 'absolute';
+    debugNotification.style.top = '170px';
+    debugNotification.style.left = '10px';
+    debugNotification.style.color = '#ff0000';
+    debugNotification.style.fontFamily = 'monospace';
+    debugNotification.style.fontSize = '16px';
+    debugNotification.style.padding = '5px';
+    debugNotification.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    debugNotification.style.border = '1px solid #ff0000';
+    debugNotification.style.transition = 'opacity 0.5s ease-in-out';
+    debugNotification.style.opacity = '1';
+    debugNotification.textContent = isDebugMode ? 'PHYSICS DEBUG MODE: ON' : 'PHYSICS DEBUG MODE: OFF';
+
+    document.body.appendChild(debugNotification);
+
+    // Fade out after 2 seconds
+    setTimeout(() => {
+      debugNotification.style.opacity = '0';
+      // Remove from DOM after fade out
+      setTimeout(() => {
+        document.body.removeChild(debugNotification);
+      }, 500);
+    }, 2000);
   }
 }
