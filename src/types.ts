@@ -45,6 +45,7 @@ export interface InputState {
   right: boolean;
   fire: boolean;
   wireframeToggle: boolean;
+  debugPhysicsToggle: boolean;
   turretLeft: boolean;  // For Q key
   turretRight: boolean; // For E key
   mouseX: number;       // For mouse position X

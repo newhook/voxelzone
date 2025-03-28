@@ -160,9 +160,9 @@ export function worldToVoxel(worldPos: THREE.Vector3): VoxelCoord {
 // Helper function to convert voxel grid coordinates to world coordinates
 export function voxelToWorld(voxelPos: VoxelCoord): THREE.Vector3 {
   return new THREE.Vector3(
-    voxelPos.x * VOXEL_SIZE + VOXEL_SIZE / 2,
-    voxelPos.y * VOXEL_SIZE + VOXEL_SIZE / 2,
-    voxelPos.z * VOXEL_SIZE + VOXEL_SIZE / 2
+    voxelPos.x * VOXEL_SIZE,
+    voxelPos.y * VOXEL_SIZE,
+    voxelPos.z * VOXEL_SIZE,
   );
 }
 

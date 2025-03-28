@@ -14,7 +14,6 @@ import {
   worldToVoxel,
   voxelToWorld
 } from './voxel';
-import { createObstacleBody } from './physics';
 import { GameConfig } from './config';
 
 // Chunk size (16x16x16 voxels per chunk, like Minecraft)
@@ -35,11 +34,12 @@ export class VoxelWorld {
   private config: GameConfig;
   private materialMeshes: THREE.MeshStandardMaterial[] = [];
   private geometry: THREE.BoxGeometry;
+  private debugPhysics: boolean = false;
+  private debugMeshes: THREE.Mesh[] = [];
 
   constructor(scene: THREE.Scene, physicsWorld: PhysicsWorld, config: GameConfig) {
     this.scene = scene;
     this.physicsWorld = physicsWorld;
-    this.world = physicsWorld.world;
     this.config = config;
 
     // Create geometry for voxels
@@ -61,6 +61,29 @@ export class VoxelWorld {
       });
   }
 
+  // Enable or disable physics debug visualization
+  setDebugPhysics(enabled: boolean): void {
+    this.debugPhysics = enabled;
+    
+    // Clear existing debug meshes if turning off
+    if (!enabled) {
+      this.clearDebugMeshes();
+      return;
+    }
+    
+    // Re-render all chunks to show debug visualization
+    for (const chunk of this.chunks.values()) {
+      chunk.dirty = true;
+    }
+  }
+  
+  // Clear all debug visualization meshes
+  private clearDebugMeshes(): void {
+    for (const mesh of this.debugMeshes) {
+      this.scene.remove(mesh);
+    }
+    this.debugMeshes = [];
+  }
 
   // Get or create a chunk at the specified position
   getOrCreateChunk(position: { x: number, y: number, z: number }): Chunk {
@@ -105,11 +128,14 @@ export class VoxelWorld {
     };
   }
 
-  // Set a voxel in the world
+  // Create a voxel in the world based on material properties
   setVoxel(voxelPos: VoxelCoord, material: VoxelMaterial | undefined): void {
     const chunk = this.getChunkForVoxel(voxelPos);
     const localPos = this.voxelToChunkLocal(voxelPos);
     const key = getVoxelKey(localPos);
+
+    // Check if we're removing a voxel
+    const isRemoving = material === undefined && chunk.voxels.has(key);
 
     // If material is undefined, remove the voxel
     if (material === undefined) {
@@ -133,6 +159,16 @@ export class VoxelWorld {
       localPos.y === 0 || localPos.y === CHUNK_SIZE - 1 ||
       localPos.z === 0 || localPos.z === CHUNK_SIZE - 1) {
       this.markNeighborChunksDirty(voxelPos);
+    }
+
+    // Check for unsupported voxels if we removed a voxel
+    if (isRemoving) {
+      // console.trace();
+      // console.log("Checking for unsupported voxels...");
+      // Regular handling for other materials
+      setTimeout(() => {
+        this.checkUnsupportedVoxels(voxelPos, 3);
+      }, 50);
     }
   }
 
@@ -214,29 +250,23 @@ export class VoxelWorld {
             z: chunk.position.z * CHUNK_SIZE + localPos.z
           });
 
-          // Create physics body
-          const body = createObstacleBody(
-            { width: VOXEL_SIZE, height: VOXEL_SIZE, depth: VOXEL_SIZE },
-            { x: worldPos.x, y: worldPos.y, z: worldPos.z },
-            this.physicsWorld.world,
-            0, // Static body
+          // Create appropriate rigid body type based on fixed property
+          let rigidBodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(worldPos.x, worldPos.y, worldPos.z);
+          const body = this.physicsWorld.world.createRigidBody(rigidBodyDesc);
+
+          // Create the collider
+          const colliderDesc = RAPIER.ColliderDesc.cuboid(
+            VOXEL_SIZE / 2,
+            VOXEL_SIZE / 2,
+            VOXEL_SIZE / 2
           );
 
-          // Get all colliders on this body to update their properties
-          // for (let j = 0; j < body.numColliders(); j++) {
-          //   const rapierCollider = body.collider(j);
-          //   const collider = this.physicsWorld.world.getCollider(rapierCollider.handle);
+          // Normal bodies use their material properties
+          colliderDesc.setFriction(voxelProps.friction);
+          colliderDesc.setRestitution(voxelProps.restitution);
 
-          //   // Make sure collider is solid for player collisions
-          //   collider.setSensor(false);
-
-          //   // Set material properties based on voxel type
-          //   collider.setFriction(voxelProps.friction);
-          //   collider.setRestitution(voxelProps.restitution);
-
-          //   // Enable collision events
-          //   collider.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS);
-          // }
+          // Create the collider
+          this.physicsWorld.world.createCollider(colliderDesc, body);
 
           // Store physics body
           const gameObj: GameObject = {
@@ -250,6 +280,22 @@ export class VoxelWorld {
 
           const keyStr = `${localPos.x},${localPos.y},${localPos.z}`;
           chunk.physicsObjects.set(keyStr, gameObj);
+          
+          // Add debug visualization if debug mode is enabled
+          if (this.debugPhysics) {
+            const debugGeometry = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE);
+            const debugMaterial = new THREE.MeshBasicMaterial({
+              color: 0xff0000,
+              wireframe: true,
+              transparent: true,
+              opacity: 0.7
+            });
+            
+            const debugMesh = new THREE.Mesh(debugGeometry, debugMaterial);
+            debugMesh.position.copy(worldPos);
+            this.scene.add(debugMesh);
+            this.debugMeshes.push(debugMesh);
+          }
         }
       });
 
@@ -411,6 +457,377 @@ export class VoxelWorld {
       }
       y--;
     }
-    return 0; // Default ground level if no terrain found
+    return 1; // Default ground level if no terrain found
+  }
+
+  // Check for unsupported voxels in a region
+  private checkUnsupportedVoxels(center: VoxelCoord, radius: number): void {
+    // Track voxels that need to be processed for physics
+    const voxelsToCheck: Array<{ pos: VoxelCoord, material: VoxelMaterial }> = [];
+    const processedVoxels = new Set<string>();
+
+    // First, let's quickly check if the center voxel is a tree trunk (wood)
+    const isTrunkRemoval = this.getAdjacentWoodCount(center) > 0;
+
+    // Increase radius for tree structures to ensure we catch the entire tree
+    const checkRadius = isTrunkRemoval ? 10 : radius;
+
+    // First pass: collect all wood blocks that might need checking
+    for (let x = -checkRadius; x <= checkRadius; x++) {
+      for (let y = 0; y <= checkRadius * 2; y++) { // Check more upward (trees are tall)
+        for (let z = -checkRadius; z <= checkRadius; z++) {
+          const checkPos = {
+            x: center.x + x,
+            y: center.y + y,
+            z: center.z + z
+          };
+
+          // Skip if we've already processed this voxel
+          const key = getVoxelKey(checkPos);
+          if (processedVoxels.has(key)) continue;
+
+          // Get the voxel material
+          const material = this.getVoxel(checkPos);
+          if (material === undefined) continue;
+
+          // First collect all wood blocks that might be unsupported
+          if (material === VoxelMaterial.WOOD) {
+            voxelsToCheck.push({ pos: checkPos, material });
+            processedVoxels.add(key);
+          }
+        }
+      }
+    }
+
+    // Process all wood blocks first
+    for (const { pos, material } of voxelsToCheck) {
+      // Check if this wood block has a support chain to the ground
+      if (!this.hasWoodSupportChain(pos)) {
+        // No support chain - convert to a physical object
+        this.setVoxel(pos, undefined);
+        const physicsObj = this.createDynamicVoxelBody(pos, material);
+        this.physicsWorld.addBody(physicsObj);
+      }
+    }
+
+    // Clear the arrays for the second pass
+    voxelsToCheck.length = 0;
+    processedVoxels.clear();
+
+    // Second pass: collect all non-wood blocks (leaves, etc.) that might need checking
+    for (let x = -checkRadius; x <= checkRadius; x++) {
+      for (let y = 0; y <= checkRadius * 2; y++) {
+        for (let z = -checkRadius; z <= checkRadius; z++) {
+          const checkPos = {
+            x: center.x + x,
+            y: center.y + y,
+            z: center.z + z
+          };
+
+          // Skip if we've already processed this voxel
+          const key = getVoxelKey(checkPos);
+          if (processedVoxels.has(key)) continue;
+
+          // Get the voxel material
+          const material = this.getVoxel(checkPos);
+          if (material === undefined) continue;
+
+          // Skip wood, we've already processed those
+          if (material === VoxelMaterial.WOOD) continue;
+
+          // Only care about voxels that can be affected by gravity
+          if (material !== VoxelMaterial.LEAVES) {
+            if (!voxelProperties[material].gravity) continue;
+          }
+
+          voxelsToCheck.push({ pos: checkPos, material });
+          processedVoxels.add(key);
+        }
+      }
+    }
+
+    // Process all non-wood blocks now that wood blocks have been processed
+    for (const { pos, material } of voxelsToCheck) {
+      if (!this.hasSupport(pos)) {
+        // Voxel has no support - convert to a physical object
+        this.setVoxel(pos, undefined);
+        const physicsObj = this.createDynamicVoxelBody(pos, material);
+        this.physicsWorld.addBody(physicsObj);
+      }
+    }
+  }
+
+  // Count the number of adjacent wood blocks to determine if we're breaking a tree trunk
+  private getAdjacentWoodCount(pos: VoxelCoord): number {
+    let count = 0;
+    for (const neighbor of getVoxelNeighbors(pos)) {
+      if (this.getVoxel(neighbor) === VoxelMaterial.WOOD) {
+        count++;
+      }
+    }
+
+    return count;
+  }
+
+  // Check if a wood block has a continuous chain of support to the ground
+  private hasWoodSupportChain(startPos: VoxelCoord): boolean {
+    // Track visited positions to avoid loops
+    const visited = new Set<string>();
+    const queue: VoxelCoord[] = [startPos];
+
+    while (queue.length > 0) {
+      const currentPos = queue.shift()!;
+      const key = getVoxelKey(currentPos);
+
+      if (visited.has(key)) continue;
+      visited.add(key);
+
+      // We reached ground level - the chain is supported
+      if (currentPos.y === 0) {
+        return true;
+      }
+
+      // Check below first (vertical support is primary)
+      const belowPos = { x: currentPos.x, y: currentPos.y - 1, z: currentPos.z };
+      const belowMaterial = this.getVoxel(belowPos);
+
+      // If there's a solid block below, it's potentially supported
+      if (belowMaterial !== undefined) {
+        const belowKey = getVoxelKey(belowPos);
+        if (!visited.has(belowKey)) {
+          queue.push(belowPos);
+          continue; // Continue with BFS
+        }
+      }
+
+      // No support directly below, check for horizontal supports for wood only
+      if (this.getVoxel(currentPos) === VoxelMaterial.WOOD) {
+        // Check all four horizontal directions for wood supports
+        const horizontalNeighbors = [
+          { x: currentPos.x + 1, y: currentPos.y, z: currentPos.z },
+          { x: currentPos.x - 1, y: currentPos.y, z: currentPos.z },
+          { x: currentPos.x, y: currentPos.y, z: currentPos.z + 1 },
+          { x: currentPos.x, y: currentPos.y, z: currentPos.z - 1 }
+        ];
+
+        for (const neighbor of horizontalNeighbors) {
+          const neighborMaterial = this.getVoxel(neighbor);
+          if (neighborMaterial === VoxelMaterial.WOOD) {
+            const neighborKey = getVoxelKey(neighbor);
+            if (!visited.has(neighborKey)) {
+              queue.push(neighbor);
+            }
+          }
+        }
+      }
+    }
+
+    // No path to ground or other support found
+    return false;
+  }
+
+  // Check if a voxel has support underneath or to the sides
+  private hasSupport(voxelPos: VoxelCoord): boolean {
+    // Check if there's a voxel directly underneath
+    const belowPos: VoxelCoord = { x: voxelPos.x, y: voxelPos.y - 1, z: voxelPos.z };
+    const belowVoxel = this.getVoxel(belowPos);
+
+    // If there's a voxel below, it's supported
+    if (belowVoxel !== undefined) {
+      return true;
+    }
+
+    // Ground level always counts as supported
+    if (voxelPos.y === 0) {
+      return true;
+    }
+
+    // For wood blocks in trees, we need to check if they're part of the tree trunk
+    // If they're not directly on top of another wood block, they should fall
+    const material = this.getVoxel(voxelPos);
+
+    if (material === VoxelMaterial.WOOD) {
+      // For wood blocks, they need to have support directly underneath
+      // Otherwise, this is a disconnected wood block (like the top of a tree)
+      return false;
+    }
+
+    // For leaves, check horizontal connections
+    if (material === VoxelMaterial.LEAVES) {
+      // Check all six neighboring positions
+      const neighbors = getVoxelNeighbors(voxelPos);
+
+      for (const neighbor of neighbors) {
+        const neighborMaterial = this.getVoxel(neighbor);
+
+        // If there's a wood block next to this leaf, consider it supported
+        if (neighborMaterial === VoxelMaterial.WOOD) {
+          return true;
+        }
+
+        // Check if it's connected to another leaf that might be supported
+        if (neighborMaterial === VoxelMaterial.LEAVES) {
+          // Use a breadth-first search to find if any connected leaf has support
+          if (this.hasLeafClusterSupport(voxelPos)) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
+  // Use breadth-first search to find if a cluster of leaves has any support
+  private hasLeafClusterSupport(startPos: VoxelCoord): boolean {
+    const visited = new Set<string>();
+    const queue: VoxelCoord[] = [startPos];
+
+    // Limit search to prevent infinite loops for very large trees
+    const maxSearchSize = 100;
+
+    while (queue.length > 0 && visited.size < maxSearchSize) {
+      const current = queue.shift()!;
+      const key = getVoxelKey(current);
+
+      if (visited.has(key)) continue;
+      visited.add(key);
+
+      // Check if this leaf has support from below
+      const belowPos: VoxelCoord = { x: current.x, y: current.y - 1, z: current.z };
+      const belowMaterial = this.getVoxel(belowPos);
+
+      // If there's something directly below, check if it's supporting
+      if (belowMaterial !== undefined) {
+        // If it's a wood block, check if it has a support chain to the ground
+        if (belowMaterial === VoxelMaterial.WOOD) {
+          if (this.hasWoodSupportChain(belowPos)) {
+            return true; // Found support from a supported wood block
+          }
+        }
+        // If it's another material (like ground), it's supporting
+        else if (belowMaterial !== VoxelMaterial.LEAVES) {
+          return true;
+        }
+      }
+
+      // Add all neighboring leaves/wood to the queue
+      const neighbors = getVoxelNeighbors(current);
+      for (const neighbor of neighbors) {
+        const neighborMaterial = this.getVoxel(neighbor);
+
+        // If there's a wood block, check if it's actually supported
+        if (neighborMaterial === VoxelMaterial.WOOD) {
+          if (this.hasWoodSupportChain(neighbor)) {
+            return true; // Found support from a supported wood block
+          }
+        }
+
+        // If it's another leaf, add to the queue to check later
+        if (neighborMaterial === VoxelMaterial.LEAVES) {
+          const neighborKey = getVoxelKey(neighbor);
+          if (!visited.has(neighborKey)) {
+            queue.push(neighbor);
+          }
+        }
+      }
+    }
+
+    // No support found in the cluster
+    return false;
+  }
+
+  // Create a dynamic physics body for a voxel
+  private createDynamicVoxelBody(voxelPos: VoxelCoord, material: VoxelMaterial): GameObject {
+    const worldPos = voxelToWorld(voxelPos);
+
+    // Create a dynamic rigid body
+    const rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(worldPos.x, worldPos.y, worldPos.z);
+
+    const body = this.physicsWorld.world.createRigidBody(rigidBodyDesc);
+
+    // Create the collider
+    const colliderDesc = RAPIER.ColliderDesc.cuboid(
+      VOXEL_SIZE / 2,
+      VOXEL_SIZE / 2,
+      VOXEL_SIZE / 2
+    );
+
+    // Set physical properties based on the material
+    const voxelProps = voxelProperties[material];
+    colliderDesc.setFriction(voxelProps.friction);
+    colliderDesc.setRestitution(voxelProps.restitution);
+    this.physicsWorld.world.createCollider(colliderDesc, body);
+
+    // Create a simple mesh for the falling voxel
+    const geometry = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE);
+    const meshMaterial = new THREE.MeshStandardMaterial({
+      color: voxelProps.color,
+      transparent: voxelProps.transparent,
+      opacity: voxelProps.transparent ? 0.8 : 1.0,
+      roughness: 0.7,
+      metalness: 0.1
+    });
+
+    const mesh = new THREE.Mesh(geometry, meshMaterial);
+    mesh.position.copy(worldPos);
+    this.scene.add(mesh);
+    
+    // Create debug visualization if debug mode is enabled
+    let debugMesh: THREE.Mesh | null = null;
+    if (this.debugPhysics) {
+      const debugGeometry = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE);
+      const debugMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff0000,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.7
+      });
+      
+      debugMesh = new THREE.Mesh(debugGeometry, debugMaterial);
+      debugMesh.position.copy(worldPos);
+      this.scene.add(debugMesh);
+      this.debugMeshes.push(debugMesh);
+    }
+
+    // Create the game object
+    const gameObj: GameObject = {
+      mesh,
+      body,
+      update: () => {
+        // Update mesh position based on physics body
+        const position = body.translation();
+        mesh.position.set(position.x, position.y, position.z);
+
+        // Update mesh rotation based on physics body
+        const rotation = body.rotation();
+        mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+        
+        // Update debug mesh if it exists
+        if (debugMesh) {
+          debugMesh.position.copy(mesh.position);
+          debugMesh.quaternion.copy(mesh.quaternion);
+        }
+
+        // Remove if fallen too far (cleanup)
+        if (position.y < -20) {
+          this.scene.remove(mesh);
+          if (debugMesh) {
+            this.scene.remove(debugMesh);
+            const index = this.debugMeshes.indexOf(debugMesh);
+            if (index !== -1) {
+              this.debugMeshes.splice(index, 1);
+            }
+          }
+          this.physicsWorld.removeBody(gameObj);
+          return false; // Signal that this object should be removed
+        }
+
+        return true;
+      }
+    };
+
+    return gameObj;
   }
 }
