@@ -10,7 +10,7 @@ export class PhysicsWorld implements PhysicsWorldType {
     // Create a physics world
     const gravity = { x: 0.0, y: -9.81, z: 0.0 };
     this.world = new RAPIER.World(gravity);
-    this.world.timestep = 1/120 // 120 fps
+    this.world.timestep = 1/120; // 120 fps
     this.bodies = [];
 
     // Create ground plane with configurable size
