@@ -175,7 +175,7 @@ export function createObstacleBody(
   // Increase friction and make sure there's no bounce for obstacles
   colliderDesc.setFriction(1.0);
   colliderDesc.setRestitution(0.0);
-  colliderDesc.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.DEFAULT)
+  colliderDesc.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.DEFAULT);
   
   // Add some contact force events for debugging if needed
   colliderDesc.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS);
