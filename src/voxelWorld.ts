@@ -14,7 +14,6 @@ import {
   worldToVoxel,
   voxelToWorld
 } from './voxel';
-import { createObstacleBody } from './physics';
 import { GameConfig } from './config';
 
 // Chunk size (16x16x16 voxels per chunk, like Minecraft)
@@ -39,7 +38,6 @@ export class VoxelWorld {
   constructor(scene: THREE.Scene, physicsWorld: PhysicsWorld, config: GameConfig) {
     this.scene = scene;
     this.physicsWorld = physicsWorld;
-    this.world = physicsWorld.world;
     this.config = config;
 
     // Create geometry for voxels
@@ -105,7 +103,7 @@ export class VoxelWorld {
     };
   }
 
-  // Create a voxel in the world - this handles both fixed and non-fixed voxels based on material properties
+  // Create a voxel in the world based on material properties
   setVoxel(voxelPos: VoxelCoord, material: VoxelMaterial | undefined): void {
     const chunk = this.getChunkForVoxel(voxelPos);
     const localPos = this.voxelToChunkLocal(voxelPos);
@@ -228,16 +226,7 @@ export class VoxelWorld {
           });
 
           // Create appropriate rigid body type based on fixed property
-          let rigidBodyDesc;
-          if (voxelProps.fixed) {
-            // Use fixed rigid body for voxels marked as fixed
-            rigidBodyDesc = RAPIER.RigidBodyDesc.fixed()
-          } else {
-            // Use static body for normal voxels
-            rigidBodyDesc = RAPIER.RigidBodyDesc.fixed()
-          }
-          rigidBodyDesc = rigidBodyDesc.setTranslation(worldPos.x, worldPos.y, worldPos.z);
-
+          let rigidBodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(worldPos.x, worldPos.y, worldPos.z);
           const body = this.physicsWorld.world.createRigidBody(rigidBodyDesc);
 
           // Create the collider
@@ -247,17 +236,9 @@ export class VoxelWorld {
             VOXEL_SIZE / 2
           );
 
-          // Set physical properties based on voxel type
-          if (voxelProps.fixed) {
-            // Fixed bodies have high friction, no bounce, and higher density
-            colliderDesc.setFriction(1.0);
-            colliderDesc.setRestitution(0.0);
-            colliderDesc.setDensity(10.0);
-          } else {
-            // Normal bodies use their material properties
-            colliderDesc.setFriction(voxelProps.friction);
-            colliderDesc.setRestitution(voxelProps.restitution);
-          }
+          // Normal bodies use their material properties
+          colliderDesc.setFriction(voxelProps.friction);
+          colliderDesc.setRestitution(voxelProps.restitution);
 
           // Create the collider
           this.physicsWorld.world.createCollider(colliderDesc, body);
@@ -435,7 +416,7 @@ export class VoxelWorld {
       }
       y--;
     }
-    return 0; // Default ground level if no terrain found
+    return 1; // Default ground level if no terrain found
   }
 
   // Check for unsupported voxels in a region

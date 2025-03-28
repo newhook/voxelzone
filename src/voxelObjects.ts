@@ -44,7 +44,7 @@ export function createBuilding(voxelWorld: VoxelWorld, x: number, z: number): vo
     }
 
     // Add doorway positions to the skip list
-    for (let dy = 1; dy <= doorHeight; dy++) {
+    for (let dy = 0; dy <= doorHeight; dy++) {
         const doorPosKey = `${doorX},${groundY + dy},${doorZ}`;
         skipPositions.add(doorPosKey);
     }
@@ -86,12 +86,11 @@ export function createBuilding(voxelWorld: VoxelWorld, x: number, z: number): vo
     }
 
     // Create the building structure
-    // Create walls
     for (let dx = 0; dx < width; dx++) {
         for (let dz = 0; dz < depth; dz++) {
-            for (let dy = 0; dy < height; dy++) {
-                // Only create voxels for the outer walls
-                if (dx === 0 || dx === width - 1 || dz === 0 || dz === depth - 1 || dy === 0 || dy === height - 1) {
+            // Only create voxels for the outer walls
+            if (dx === 0 || dx === width - 1 || dz === 0 || dz === depth - 1) {
+                for (let dy = 0; dy < height; dy++) {
                     // Current voxel position
                     const voxelX = x + dx;
                     const voxelY = groundY + dy;
@@ -246,7 +245,7 @@ export function createFortress(voxelWorld: VoxelWorld, x: number, z: number): vo
 
     // Determine fortress entrance (gate) position
     let entranceX = x;
-    let entranceZ = z + Math.floor(size / 2) -1;
+    let entranceZ = z + Math.floor(size / 2) - 1;
 
     // Add actual doorway opening positions to skip list
     for (let dy = 0; dy <= 2; dy++) {
