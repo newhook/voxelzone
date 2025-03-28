@@ -163,6 +163,9 @@ export class Projectile implements GameObject {
     if (this.handleTankCollision(other)) {
       return; // Tank collision was handled, no need to proceed
     }
+    if (this.handleDebrisCollision(other)) {
+      return; // Tank collision was handled, no need to proceed
+    }
 
     // Create explosion effect at collision point
     this.createExplosionEffect(projectileVector);
@@ -180,12 +183,24 @@ export class Projectile implements GameObject {
     this.destroy();
   }
 
+  private handleDebrisCollision(other: GameObject): boolean {
+    // If we are a player projectile hitting an enemy
+    if (this.state.debris.includes(other)) {
+      // Get the index of the enemy in the array
+      const index = this.state.debris.indexOf(other);
+      if (index !== -1) {
+        this.state.handleDebrisHit(index, this.body.translation);
+        this.destroy();
+        return true;
+      }
+    }
+    return false; // No tank collision was handled
+  }
+
   // Handle collision with tanks specifically
   private handleTankCollision(other: GameObject): boolean {
     // If we are a player projectile hitting an enemy
-    if (this.source === ProjectileSource.PLAYER &&
-      this.state.enemies.includes(other as any)) {
-
+    if (this.source === ProjectileSource.PLAYER && this.state.enemies.includes(other)) {
       // Get the index of the enemy in the array
       const enemyIndex = this.state.enemies.indexOf(other);
       if (enemyIndex !== -1) {

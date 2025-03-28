@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d';
 import { GameObject } from './types';
 import { PhysicsWorld } from './physics';
+import { PlayState } from './playState';
 import {
   VoxelMaterial,
   VoxelCoord,
@@ -28,6 +29,7 @@ export interface Chunk {
 }
 
 export class VoxelWorld {
+  private state : PlayState;
   private scene: THREE.Scene;
   private chunks: Map<string, Chunk> = new Map();
   private physicsWorld: PhysicsWorld;
@@ -37,7 +39,8 @@ export class VoxelWorld {
   private debugPhysics: boolean = false;
   private debugMeshes: THREE.Mesh[] = [];
 
-  constructor(scene: THREE.Scene, physicsWorld: PhysicsWorld, config: GameConfig) {
+  constructor(playState : PlayState, scene: THREE.Scene, physicsWorld: PhysicsWorld, config: GameConfig) {
+    this.state = playState;
     this.scene = scene;
     this.physicsWorld = physicsWorld;
     this.config = config;
@@ -504,8 +507,7 @@ export class VoxelWorld {
       if (!this.hasWoodSupportChain(pos)) {
         // No support chain - convert to a physical object
         this.setVoxel(pos, undefined);
-        const physicsObj = this.createDynamicVoxelBody(pos, material);
-        this.physicsWorld.addBody(physicsObj);
+        this.state.addDebris(this.createDynamicVoxelBody(pos, material));
       }
     }
 
@@ -550,8 +552,7 @@ export class VoxelWorld {
       if (!this.hasSupport(pos)) {
         // Voxel has no support - convert to a physical object
         this.setVoxel(pos, undefined);
-        const physicsObj = this.createDynamicVoxelBody(pos, material);
-        this.physicsWorld.addBody(physicsObj);
+        this.state.addDebris(this.createDynamicVoxelBody(pos, material));
       }
     }
   }
@@ -757,6 +758,7 @@ export class VoxelWorld {
     const voxelProps = voxelProperties[material];
     colliderDesc.setFriction(voxelProps.friction);
     colliderDesc.setRestitution(voxelProps.restitution);
+    colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
     this.physicsWorld.world.createCollider(colliderDesc, body);
 
     // Create a simple mesh for the falling voxel
@@ -771,7 +773,6 @@ export class VoxelWorld {
 
     const mesh = new THREE.Mesh(geometry, meshMaterial);
     mesh.position.copy(worldPos);
-    this.scene.add(mesh);
 
     // Create debug visualization if debug mode is enabled
     let debugMesh: THREE.Mesh | null = null;
@@ -811,7 +812,7 @@ export class VoxelWorld {
 
         // Remove if fallen too far (cleanup)
         if (position.y < -20) {
-          this.scene.remove(mesh);
+          this.state.removeDebris(gameObj);
           if (debugMesh) {
             this.scene.remove(debugMesh);
             const index = this.debugMeshes.indexOf(debugMesh);
@@ -819,7 +820,6 @@ export class VoxelWorld {
               this.debugMeshes.splice(index, 1);
             }
           }
-          this.physicsWorld.removeBody(gameObj);
           return false; // Signal that this object should be removed
         }
 

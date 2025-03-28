@@ -19,7 +19,8 @@ export class PlayState implements IGameState {
   physicsWorld: PhysicsWorld;
   private camera: THREE.PerspectiveCamera;
   player!: PlayerTank; // Using definite assignment assertion
-  enemies: GameObject[] = [];
+  debris: GameObject[] = [];
+  enemies: Vehicle[] = [];
   terrain: GameObject[] = [];
   projectiles: GameObject[] = [];
   score: number = 0;
@@ -57,7 +58,7 @@ export class PlayState implements IGameState {
 
     this.gameStateManager = gameStateManager;
     this.physicsWorld = new PhysicsWorld(this.config);
-    this.voxelWorld = new VoxelWorld(this.scene, this.physicsWorld, this.config);
+    this.voxelWorld = new VoxelWorld(this, this.scene, this.physicsWorld, this.config);
     this.initializeGameObjects(this.config);
 
     // Set up camera with increased far plane and narrower FOV for first person view
@@ -442,12 +443,34 @@ export class PlayState implements IGameState {
         this.removeProjectile(i);
         continue;
       }
-      
+
       // Physics-based collision detection is now handled by the Projectile class
       // through the collision handler registered with the physics world
       if (projectile.update) {
         projectile.update();
       }
+    }
+  }
+
+  public handleDebrisHit(index: number, enemyPos: { x: number, y: number, z: number }): void {
+    const debris = this.debris[index];
+    const soundManager = this.gameStateManager.initSoundManager();
+    soundManager.playHit();
+
+    // Create hit explosion effect
+    this.createExplosion(enemyPos);
+
+    // Remove from array
+    this.debris.splice(index, 1);
+
+    // Remove the enemy from scene
+    if (debris.mesh.parent) {
+      debris.mesh.parent.remove(debris.mesh);
+    }
+
+    // Remove from physics world
+    if (debris.body) {
+      this.physicsWorld.removeBody(debris);
     }
   }
 
@@ -852,6 +875,16 @@ export class PlayState implements IGameState {
     // Remove any on-screen feedback elements
     const feedbackElements = document.querySelectorAll('.game-feedback');
     feedbackElements.forEach(element => element.remove());
+  }
+
+  public addDebris(debris: GameObject): void {
+    this.physicsWorld.addBody(debris);
+    this.scene.add(debris.mesh);
+  }
+
+  public removeDebris(debris: GameObject): void {
+    this.scene.remove(debris.mesh);
+    this.physicsWorld.removeBody(debris);
   }
 
   setupInputHandlers(): InputState {
