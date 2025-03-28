@@ -189,8 +189,8 @@ export abstract class Tank implements Vehicle {
     const initialVelocity = new THREE.Vector3(tankVel.x, tankVel.y, tankVel.z);
 
     // Determine projectile source based on tank type
-    const source = this instanceof PlayerTank 
-      ? ProjectileSource.PLAYER 
+    const source = this instanceof PlayerTank
+      ? ProjectileSource.PLAYER
       : ProjectileSource.ENEMY;
 
     // Create new projectile using the Projectile class
@@ -219,13 +219,13 @@ export abstract class Tank implements Vehicle {
   rotateTurret(direction: number): void {
     // If direction is a small value (from mouse movement), use it directly as rotation amount
     // If it's 1 or -1 (from keyboard), scale it for compatibility with old controls
-    let rotationAmount = Math.abs(direction) <= 0.1 
+    let rotationAmount = Math.abs(direction) <= 0.1
       ? direction // Use mouse movement directly
       : direction * 0.05; // Scale for keyboard controls (Q/E keys)
-    
+
     // Calculate new rotation
     const newRotation = this.turretContainer.rotation.y + rotationAmount;
-    
+
     // Limit rotation to ±45 degrees (±π/4 radians)
     const maxRotation = Math.PI / 4;
     this.turretContainer.rotation.y = Math.max(-maxRotation, Math.min(maxRotation, newRotation));
@@ -247,7 +247,7 @@ export abstract class Tank implements Vehicle {
 
     // Reduce hitpoints
     this.hitpoints -= amount;
-    
+
     // Return false if tank is destroyed
     return this.hitpoints > 0;
   }
@@ -277,6 +277,7 @@ function createVehicleBody(
   colliderDesc.setDensity(mass / (size.width * size.height * size.depth));
   colliderDesc.setFriction(1.5);    // Increased from 0.7 for much better grip
   colliderDesc.setRestitution(0.0); // Reduced from 0.1 to eliminate bouncing
+  colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
 
   // Attach collider to body
   world.createCollider(colliderDesc, body);

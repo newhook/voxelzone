@@ -19,7 +19,7 @@ export class PlayState implements IGameState {
   physicsWorld: PhysicsWorld;
   private camera: THREE.PerspectiveCamera;
   player!: PlayerTank; // Using definite assignment assertion
-  enemies: Vehicle[] = [];
+  enemies: GameObject[] = [];
   terrain: GameObject[] = [];
   projectiles: GameObject[] = [];
   score: number = 0;
@@ -442,103 +442,16 @@ export class PlayState implements IGameState {
         this.removeProjectile(i);
         continue;
       }
-      // XXX:
-      // this.checkProjectileCollisions(i, projectile);
-    }
-  }
-
-  // XXX:
-  private checkProjectileCollisions(projectileIndex: number, projectile: GameObject): void {
-    // Skip if this is not a proper Projectile instance
-    if (!(projectile instanceof Projectile)) return;
-
-    const projectilePos = projectile.body.translation();
-
-    // Create explosion radius for voxel destruction (destroy multiple voxels for more impact)
-    const explosionRadius = 1.5; // Radius in voxel units
-
-    // Convert projectile position to THREE.Vector3 for voxel world methods
-    const projectileVector = new THREE.Vector3(projectilePos.x, projectilePos.y, projectilePos.z);
-
-    // Check if projectile hit a voxel
-    const rayResult = this.voxelWorld.raycast(
-      projectileVector.clone().sub(new THREE.Vector3(0, 0, 0.1)), // Small offset to detect collision
-      new THREE.Vector3(0, 0, 1), // Direction doesn't matter for point check
-      explosionRadius // Use radius as max distance
-    );
-
-    if (rayResult.voxel) {
-      // Create explosion effect
-      this.createExplosion(projectilePos);
-
-      // Play explosion sound
-      const soundManager = this.gameStateManager.initSoundManager();
-      soundManager.playHit();
-
-      // Destroy voxels in a sphere around the impact point
-      for (let x = -Math.ceil(explosionRadius); x <= Math.ceil(explosionRadius); x++) {
-        for (let y = -Math.ceil(explosionRadius); y <= Math.ceil(explosionRadius); y++) {
-          for (let z = -Math.ceil(explosionRadius); z <= Math.ceil(explosionRadius); z++) {
-            const checkPos = {
-              x: rayResult.voxel.x + x,
-              y: rayResult.voxel.y + y,
-              z: rayResult.voxel.z + z
-            };
-
-            // Check if position is within explosion radius
-            const distance = Math.sqrt(x * x + y * y + z * z);
-            if (distance <= explosionRadius) {
-              // Remove the voxel
-              this.voxelWorld.setVoxel(checkPos, undefined);
-            }
-          }
-        }
-      }
-
-      // Remove the projectile
-      this.removeProjectile(projectileIndex);
-      return;
-    }
-
-    // Check for enemy collisions if it's a player projectile
-    if (projectile.source === ProjectileSource.PLAYER) {
-      for (let j = this.enemies.length - 1; j >= 0; j--) {
-        const enemy = this.enemies[j];
-        if (!enemy.body || !enemy.mesh) continue;
-
-        const enemyPos = enemy.body.translation();
-        const distance = Math.sqrt(
-          Math.pow(projectilePos.x - enemyPos.x, 2) +
-          Math.pow(projectilePos.y - enemyPos.y, 2) +
-          Math.pow(projectilePos.z - enemyPos.z, 2)
-        );
-
-        if (distance < 2) {
-          this.handleEnemyHit(j, enemyPos);
-          this.removeProjectile(projectileIndex);
-          break;
-        }
-      }
-    }
-    // Check for player collision if it's an enemy projectile
-    else if (projectile.source === ProjectileSource.ENEMY) {
-      if (!this.player.body || !this.player.mesh) return;
-
-      const playerPos = this.player.body.translation();
-      const distance = Math.sqrt(
-        Math.pow(projectilePos.x - playerPos.x, 2) +
-        Math.pow(projectilePos.y - playerPos.y, 2) +
-        Math.pow(projectilePos.z - playerPos.z, 2)
-      );
-
-      if (distance < 2) {
-        this.handlePlayerHit();
-        this.removeProjectile(projectileIndex);
+      
+      // Physics-based collision detection is now handled by the Projectile class
+      // through the collision handler registered with the physics world
+      if (projectile.update) {
+        projectile.update();
       }
     }
   }
 
-  private handleEnemyHit(enemyIndex: number, enemyPos: { x: number, y: number, z: number }): void {
+  public handleEnemyHit(enemyIndex: number, enemyPos: { x: number, y: number, z: number }): void {
     const enemy = this.enemies[enemyIndex];
 
     const soundManager = this.gameStateManager.initSoundManager();
@@ -701,7 +614,7 @@ export class PlayState implements IGameState {
     }
   }
 
-  private handlePlayerHit(): void {
+  public handlePlayerHit(): void {
     // Flash the player tank to indicate damage and check if destroyed
     const isAlive = this.player.takeDamage(10);
     const soundManager = this.gameStateManager.initSoundManager();
