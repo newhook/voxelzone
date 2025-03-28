@@ -58,4 +58,6 @@ export interface PhysicsWorld {
   update: (deltaTime: number) => void;
   addBody: (body: GameObject) => void;
   removeBody: (body: GameObject) => void;
+  registerCollisionHandler: (body: GameObject, handler: (other: GameObject) => void) => void;
+  unregisterCollisionHandler: (body: GameObject) => void;
 }

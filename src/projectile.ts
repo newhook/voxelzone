@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d';
 import { GameObject } from './types';
 import { PlayState } from './playState';
-import { VoxelCoord, voxelProperties } from './voxel';
+import { VoxelCoord, voxelProperties, worldToVoxel } from './voxel';
 
 export enum ProjectileSource {
   PLAYER,
@@ -14,6 +14,7 @@ export class Projectile implements GameObject {
   mesh: THREE.Mesh;
   body: RAPIER.RigidBody;
   source: ProjectileSource;
+  hasCollided: boolean = false;
   
   constructor(
     playState: PlayState,
@@ -50,16 +51,18 @@ export class Projectile implements GameObject {
     const rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(position.x, position.y, position.z)
       .setLinearDamping(0.0) // No drag on projectiles
-      .setAngularDamping(0.0); // No angular drag
+      .setAngularDamping(0.0) // No angular drag
+      .setCcdEnabled(true);  // Enable continuous collision detection for fast-moving projectiles
       
-    const physicsWorld = this.state.physicsWorld
+    const physicsWorld = this.state.physicsWorld;
     this.body = physicsWorld.world.createRigidBody(rigidBodyDesc);
     
     // Create collider (slightly smaller than visual size for better gameplay)
     const colliderDesc = RAPIER.ColliderDesc.ball(0.4)
       .setDensity(1.0)
       .setRestitution(0.5)
-      .setFriction(0.0);
+      .setFriction(0.0)
+      .setSensor(false);  // Make it a physical collider, not just a sensor
       
     physicsWorld.world.createCollider(colliderDesc, this.body);
     
@@ -77,6 +80,11 @@ export class Projectile implements GameObject {
     
     // Add a trail effect
     this.addProjectileTrail();
+    
+    // Register collision handler with physics world
+    this.state.physicsWorld.registerCollisionHandler(this, (other) => {
+      this.handleCollision(other);
+    });
     
     // Set up auto-destruction after 5 seconds
     setTimeout(() => this.destroy(), 5000);
@@ -141,7 +149,81 @@ export class Projectile implements GameObject {
     updateTrail();
   }
   
+  // Handle collision with other physics objects
+  private handleCollision(other: GameObject): void {
+    console.log("Collision detected with:", other);
+    // Prevent multiple collisions from being processed
+    if (this.hasCollided) return;
+    this.hasCollided = true;
+    
+    // Get current projectile position
+    const projectilePos = this.body.translation();
+    const projectileVector = new THREE.Vector3(projectilePos.x, projectilePos.y, projectilePos.z);
+    
+    // Create explosion effect at collision point
+    this.createExplosionEffect(projectileVector);
+    
+    // Convert world position to voxel coordinates for potential voxel destruction
+    const voxelPos = worldToVoxel(projectileVector);
+    
+    // Destroy voxels in a radius around the collision point
+    this.destroyVoxelsInRadius(voxelPos, 1.5);
+    
+    // Apply explosive force to nearby physics objects
+    this.applyExplosiveForce(projectileVector, 10, 300);
+    
+    // Destroy the projectile
+    this.destroy();
+  }
+  
+  // Apply explosive force to nearby physics objects
+  private applyExplosiveForce(center: THREE.Vector3, radius: number, force: number): void {
+    // Process all physics bodies in the world
+    for (const gameObj of this.state.physicsWorld.bodies) {
+      // Skip if this is the projectile itself
+      if (gameObj === this) continue;
+      
+      try {
+        // Get the position of the physics body
+        const bodyPos = gameObj.body.translation();
+        const bodyVector = new THREE.Vector3(bodyPos.x, bodyPos.y, bodyPos.z);
+        
+        // Calculate distance to explosion center
+        const distance = center.distanceTo(bodyVector);
+        
+        // Skip if too far away
+        if (distance > radius) continue;
+        
+        // Calculate force based on distance (closer = stronger)
+        const forceFactor = 1 - Math.min(1, distance / radius);
+        const explosionForce = force * forceFactor;
+        
+        // Calculate direction away from explosion center
+        const forceDir = bodyVector.clone().sub(center).normalize();
+        
+        // Apply the impulse force
+        const impulse = {
+          x: forceDir.x * explosionForce,
+          y: forceDir.y * explosionForce,
+          z: forceDir.z * explosionForce
+        };
+        
+        // Apply the impulse at the center of the body
+        gameObj.body.applyImpulse(impulse, true);
+        
+        // Wake up the body to ensure physics simulation activates it
+        gameObj.body.wakeUp();
+      } catch (e) {
+        // Skip invalid bodies
+        continue;
+      }
+    }
+  }
+  
   destroy(): void {
+    // Unregister collision handler
+    this.state.physicsWorld.unregisterCollisionHandler(this);
+    
     const scene = this.state.scene;
     if (scene && this.mesh.parent) {
       scene.remove(this.mesh);
@@ -157,38 +239,21 @@ export class Projectile implements GameObject {
   }
   
   update(): void {
+    // The collision detection is now handled by the physics engine via the event handler,
+    // so we only need minimal update logic here
+    
     // Check if the projectile is still active
     if (!this.body || !this.mesh) return;
-
-    // Get current projectile position from the physics body
+    
+    // Get current projectile position and velocity
     const projectilePos = this.body.translation();
-    const projectileVector = new THREE.Vector3(projectilePos.x, projectilePos.y, projectilePos.z);
-
-    // Check if projectile hit a voxel
-    const rayResult = this.state.voxelWorld.raycast(
-      projectileVector,
-      // Use projectile's velocity as direction for the ray
-      new THREE.Vector3(
-        this.body.linvel().x, 
-        this.body.linvel().y, 
-        this.body.linvel().z
-      ).normalize(),
-      0.5 // Short distance check
-    );
-
-    // If we hit a voxel, destroy the projectile and the voxel
-    if (rayResult.voxel) {
-      // Create explosion effect
-      this.createExplosionEffect(projectileVector);
-
-      // Destroy voxels in a small radius
-      this.destroyVoxelsInRadius(rayResult.voxel, 1.5);
-
-      // Destroy the projectile
+    
+    // If the projectile has fallen below the world, destroy it
+    if (projectilePos.y < -50) {
       this.destroy();
     }
   }
-
+  
   private createExplosionEffect(position: THREE.Vector3): void {
     // Create particles for explosion
     const particleCount = 10;
@@ -246,7 +311,7 @@ export class Projectile implements GameObject {
       this.state.gameStateManager.soundManager.playHit();
     }
   }
-
+  
   private destroyVoxelsInRadius(center: VoxelCoord, radius: number): void {
     for (let x = -Math.ceil(radius); x <= Math.ceil(radius); x++) {
       for (let y = -Math.ceil(radius); y <= Math.ceil(radius); y++) {

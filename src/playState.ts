@@ -14,7 +14,7 @@ import { createTerrain, createGround, createBoundaryWalls } from './gameObjects'
 import { createBarrier, createBuilding, createFortress, createTree, createBush, createPond, createPineTree, createCactus, createRockFormation } from './voxelObjects';
 
 export class PlayState implements IGameState {
-  private gameStateManager: GameStateManager;
+  public gameStateManager: GameStateManager;
   scene: THREE.Scene;
   physicsWorld: PhysicsWorld;
   private camera: THREE.PerspectiveCamera;
@@ -83,17 +83,17 @@ export class PlayState implements IGameState {
     // Add lighting
     const ambientLight = new THREE.AmbientLight(0x6b8cff, 4.0); // Increased from 2.0, with a blue tint
     this.scene.add(ambientLight);
-    
+
     // Main directional light (like the sun)
     const directionalLight = new THREE.DirectionalLight(0xffffcc, 2.5); // Increased from 1.5, warmer color
     directionalLight.position.set(100, 200, 100);
     directionalLight.castShadow = true;
     this.scene.add(directionalLight);
-    
+
     // Add a distant point light to simulate sky lighting
     const skyLight = new THREE.HemisphereLight(0x87ceeb, 0x648c4a, 2.0); // Sky blue and ground green
     this.scene.add(skyLight);
-    
+
     // Add a fill light from another angle to reduce harsh shadows
     const fillLight = new THREE.DirectionalLight(0xffffee, 1.0);
     fillLight.position.set(-100, 50, -50);
@@ -209,13 +209,13 @@ export class PlayState implements IGameState {
 
   handleInput(input: InputState): void {
     const soundManager = this.gameStateManager.initSoundManager();
-    
+
     // Ignore firing input if we're in the cooldown period after starting the game
     if (this.inputCooldownActive) {
       // Temporarily disable firing but keep other inputs active
       input = { ...input, fire: false };
     }
-    
+
     // Only process tank movement controls if not in fly mode
     if (!this.flyCamera.isEnabled()) {
       if (input.forward) {
@@ -264,7 +264,7 @@ export class PlayState implements IGameState {
       this.toggleWireframeMode(this.scene, input.wireframeToggle);
       this.prevWireframeState = input.wireframeToggle;
     }
-    
+
     // Check if debug physics toggle has been pressed
     if (input.debugPhysicsToggle !== this.prevDebugPhysicsState) {
       this.toggleDebugPhysics(input.debugPhysicsToggle);
@@ -442,11 +442,12 @@ export class PlayState implements IGameState {
         this.removeProjectile(i);
         continue;
       }
-
-      this.checkProjectileCollisions(i, projectile);
+      // XXX:
+      // this.checkProjectileCollisions(i, projectile);
     }
   }
 
+  // XXX:
   private checkProjectileCollisions(projectileIndex: number, projectile: GameObject): void {
     // Skip if this is not a proper Projectile instance
     if (!(projectile instanceof Projectile)) return;
@@ -890,12 +891,12 @@ export class PlayState implements IGameState {
 
     // Enable the input cooldown to prevent accidental firing on game start
     this.inputCooldownActive = true;
-    
+
     // Clear any existing timer
     if (this.inputCooldownTimer !== null) {
       clearTimeout(this.inputCooldownTimer);
     }
-    
+
     // Set timer to disable the cooldown after a short delay
     this.inputCooldownTimer = window.setTimeout(() => {
       this.inputCooldownActive = false;
@@ -1375,8 +1376,8 @@ export class PlayState implements IGameState {
       const x = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
 
-        // Create a building on this spot
-        createBuilding(this.voxelWorld, x, z);
+      // Create a building on this spot
+      createBuilding(this.voxelWorld, x, z);
     }
 
     // Create some barricades/barriers
@@ -1422,7 +1423,7 @@ export class PlayState implements IGameState {
       const x = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
       const z = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
 
-      createRockFormation(this.voxelWorld, x,  z);
+      createRockFormation(this.voxelWorld, x, z);
     }
 
     // Add a few cacti in certain areas (to create desert-like regions)

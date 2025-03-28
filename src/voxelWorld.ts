@@ -64,19 +64,19 @@ export class VoxelWorld {
   // Enable or disable physics debug visualization
   setDebugPhysics(enabled: boolean): void {
     this.debugPhysics = enabled;
-    
+
     // Clear existing debug meshes if turning off
     if (!enabled) {
       this.clearDebugMeshes();
       return;
     }
-    
+
     // Re-render all chunks to show debug visualization
     for (const chunk of this.chunks.values()) {
       chunk.dirty = true;
     }
   }
-  
+
   // Clear all debug visualization meshes
   private clearDebugMeshes(): void {
     for (const mesh of this.debugMeshes) {
@@ -163,9 +163,6 @@ export class VoxelWorld {
 
     // Check for unsupported voxels if we removed a voxel
     if (isRemoving) {
-      // console.trace();
-      // console.log("Checking for unsupported voxels...");
-      // Regular handling for other materials
       setTimeout(() => {
         this.checkUnsupportedVoxels(voxelPos, 3);
       }, 50);
@@ -264,6 +261,8 @@ export class VoxelWorld {
           // Normal bodies use their material properties
           colliderDesc.setFriction(voxelProps.friction);
           colliderDesc.setRestitution(voxelProps.restitution);
+          colliderDesc.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.DEFAULT | RAPIER.ActiveCollisionTypes.KINEMATIC_FIXED)
+          colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
 
           // Create the collider
           this.physicsWorld.world.createCollider(colliderDesc, body);
@@ -280,7 +279,7 @@ export class VoxelWorld {
 
           const keyStr = `${localPos.x},${localPos.y},${localPos.z}`;
           chunk.physicsObjects.set(keyStr, gameObj);
-          
+
           // Add debug visualization if debug mode is enabled
           if (this.debugPhysics) {
             const debugGeometry = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE);
@@ -290,7 +289,7 @@ export class VoxelWorld {
               transparent: true,
               opacity: 0.7
             });
-            
+
             const debugMesh = new THREE.Mesh(debugGeometry, debugMaterial);
             debugMesh.position.copy(worldPos);
             this.scene.add(debugMesh);
@@ -773,7 +772,7 @@ export class VoxelWorld {
     const mesh = new THREE.Mesh(geometry, meshMaterial);
     mesh.position.copy(worldPos);
     this.scene.add(mesh);
-    
+
     // Create debug visualization if debug mode is enabled
     let debugMesh: THREE.Mesh | null = null;
     if (this.debugPhysics) {
@@ -784,7 +783,7 @@ export class VoxelWorld {
         transparent: true,
         opacity: 0.7
       });
-      
+
       debugMesh = new THREE.Mesh(debugGeometry, debugMaterial);
       debugMesh.position.copy(worldPos);
       this.scene.add(debugMesh);
@@ -803,7 +802,7 @@ export class VoxelWorld {
         // Update mesh rotation based on physics body
         const rotation = body.rotation();
         mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
-        
+
         // Update debug mesh if it exists
         if (debugMesh) {
           debugMesh.position.copy(mesh.position);
