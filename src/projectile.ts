@@ -292,7 +292,7 @@ export class Projectile implements GameObject {
     }
   }
 
-  update(): void {
+  update(delta: number): void {
     // The collision detection is now handled by the physics engine via the event handler,
     // so we only need minimal update logic here
 

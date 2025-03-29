@@ -325,16 +325,23 @@ export class PlayState implements IGameState {
     this.physicsWorld.update(deltaTime);
 
     // Update player and enemies
-    this.player.update();
+    this.player.update(deltaTime);
 
     this.enemies.forEach(enemy => {
       if (enemy.update) {
-        enemy.update();
+        enemy.update(deltaTime);
       }
     });
 
+    this.terrain.forEach(obj => {
+      if (obj.update) {
+        obj.update(deltaTime);
+      }
+    });
+
+
     // Update projectiles
-    this.updateProjectiles();
+    this.updateProjectiles(deltaTime);
 
     if (this.flyCamera.enabled) {
       this.flyCamera.update(this.input, deltaTime);
@@ -427,7 +434,7 @@ export class PlayState implements IGameState {
     this.camera.lookAt(lookAtPoint);
   }
 
-  private updateProjectiles(): void {
+  private updateProjectiles(deltaTime: number): void {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const projectile = this.projectiles[i];
       if (!projectile.body || !projectile.mesh) continue;
@@ -447,7 +454,7 @@ export class PlayState implements IGameState {
       // Physics-based collision detection is now handled by the Projectile class
       // through the collision handler registered with the physics world
       if (projectile.update) {
-        projectile.update();
+        projectile.update(deltaTime);
       }
     }
   }
@@ -1310,42 +1317,50 @@ export class PlayState implements IGameState {
   }
 
   /**
-   * Creates various voxel structures on the existing terrain
-   * @param halfWorldSize Half the size of the world for placement bounds
+   * Creates various voxel structures on the existing terrain in a circular pattern
+   * @param radius The radius of the circular playing field
    */
-  private createVoxelStructures(halfWorldSize: number): void {
+  private createVoxelStructures(radius: number): void {
     // Create a few buildings scattered around the map
     const buildingCount = 10;
-
     for (let i = 0; i < buildingCount; i++) {
-      // Random position within world bounds (but not too close to the edge)
-      const x = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
-      const z = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
-
+      // Random position within a circular area
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * radius * 0.8; // Use 80% of radius to keep away from walls
+      
+      const x = Math.floor(Math.cos(angle) * distance);
+      const z = Math.floor(Math.sin(angle) * distance);
+      
       // Create a building on this spot
       createBuilding(this.voxelWorld, x, z);
     }
-
+    
     // Create some barricades/barriers
     const barrierCount = 15;
-
     for (let i = 0; i < barrierCount; i++) {
-      const x = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
-      const z = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
-
+      // Random position within a circular area
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * radius * 0.85; // Use 85% of radius
+      
+      const x = Math.floor(Math.cos(angle) * distance);
+      const z = Math.floor(Math.sin(angle) * distance);
+      
       createBarrier(this.voxelWorld, x, z);
     }
-
+    
     // Add trees to the world (both regular and pine trees)
     const treeCount = 25;
     for (let i = 0; i < treeCount; i++) {
-      const x = Math.floor((Math.random() * (halfWorldSize * 1.7)) - (halfWorldSize * 0.85));
-      const z = Math.floor((Math.random() * (halfWorldSize * 1.7)) - (halfWorldSize * 0.85));
-
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * radius * 0.9; // Using 90% of radius 
+      
+      const x = Math.floor(Math.cos(angle) * distance);
+      const z = Math.floor(Math.sin(angle) * distance);
+      
       // Check if position is far enough from player spawn (at least 20 units)
       const distanceFromOrigin = Math.sqrt(x * x + z * z);
       if (distanceFromOrigin < 20) continue;
-
+      
       // Decide between regular and pine trees
       if (Math.random() > 0.5) {
         createTree(this.voxelWorld, x, z);
@@ -1353,61 +1368,80 @@ export class PlayState implements IGameState {
         createPineTree(this.voxelWorld, x, z);
       }
     }
-
+    
     // Add bushes (more numerous but smaller)
     const bushCount = 40;
     for (let i = 0; i < bushCount; i++) {
-      const x = Math.floor((Math.random() * (halfWorldSize * 1.9)) - (halfWorldSize * 0.95));
-      const z = Math.floor((Math.random() * (halfWorldSize * 1.9)) - (halfWorldSize * 0.95));
-
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * radius * 0.95; // Using 95% of radius
+      
+      const x = Math.floor(Math.cos(angle) * distance);
+      const z = Math.floor(Math.sin(angle) * distance);
+      
       createBush(this.voxelWorld, x, z);
     }
-
+    
     // Add rock formations
     const rockCount = 15;
     for (let i = 0; i < rockCount; i++) {
-      const x = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
-      const z = Math.floor((Math.random() * (halfWorldSize * 1.8)) - (halfWorldSize * 0.9));
-
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * radius * 0.85; // Using 85% of radius
+      
+      const x = Math.floor(Math.cos(angle) * distance);
+      const z = Math.floor(Math.sin(angle) * distance);
+      
       createRockFormation(this.voxelWorld, x, z);
     }
-
-    // Add a few cacti in certain areas (to create desert-like regions)
+    
+    // Add a few cacti in a desert sector of the circle
     const cactusCount = 10;
-    const desertCenterX = halfWorldSize * 0.6;
-    const desertCenterZ = -halfWorldSize * 0.6;
-
+    const desertSectorStart = Math.PI / 4; // Start the desert at 45 degrees
+    const desertSectorSize = Math.PI / 2; // Desert covers 90 degrees of the circle
+    
     for (let i = 0; i < cactusCount; i++) {
-      // Place cacti in a desert region (roughly centered at desertCenter)
-      const angle = Math.random() * Math.PI * 2;
-      const distance = Math.random() * 50; // The "desert" radius
-
-      const x = Math.floor(desertCenterX + Math.cos(angle) * distance);
-      const z = Math.floor(desertCenterZ + Math.sin(angle) * distance);
-
+      // Place cacti in a desert sector
+      const angle = desertSectorStart + (Math.random() * desertSectorSize);
+      const distance = (radius * 0.5) + (Math.random() * radius * 0.4); // Between 50% and 90% of radius
+      
+      const x = Math.floor(Math.cos(angle) * distance);
+      const z = Math.floor(Math.sin(angle) * distance);
+      
       createCactus(this.voxelWorld, x, z);
     }
-
+    
     // Add a few ponds
     const pondCount = 5;
     for (let i = 0; i < pondCount; i++) {
-      const x = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
-      const z = Math.floor((Math.random() * (halfWorldSize * 1.6)) - (halfWorldSize * 0.8));
-
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * radius * 0.7; // Using 70% of radius to keep ponds more central
+      
+      const x = Math.floor(Math.cos(angle) * distance);
+      const z = Math.floor(Math.sin(angle) * distance);
+      
       // Ensure ponds aren't too close to player spawn
       const distanceFromOrigin = Math.sqrt(x * x + z * z);
       if (distanceFromOrigin < 30) continue;
-
+      
       createPond(this.voxelWorld, x, z);
     }
-
-    // Create a larger central structure/fortress
+    
+    // Create a fortress at the center
     createFortress(this.voxelWorld, 0, 0);
   }
 
-
   // Helper method to check if a position is valid for spawning an enemy
   private isValidSpawnPosition(position: THREE.Vector3): boolean {
+    // Check if position is within the circular arena boundary
+    const distanceFromOrigin = Math.sqrt(
+      position.x * position.x + position.z * position.z
+    );
+    const halfWorldSize = this.config.worldSize / 2 - 20;
+    
+    // If outside the arena boundary, it's not valid
+    if (distanceFromOrigin > halfWorldSize) {
+      return false;
+    }
+
     // Check distance from player (minimum 100 units/meters)
     const distanceToPlayer = position.distanceTo(this.player.mesh.position);
     if (distanceToPlayer < 100) {
@@ -1420,7 +1454,6 @@ export class PlayState implements IGameState {
       if (!obstacle.body || obstacle === this.terrain[this.terrain.length - 1]) {
         continue;
       }
-
       const obstaclePos = obstacle.body.translation();
       const obstacleSize = 5; // Approximate size of obstacles
 

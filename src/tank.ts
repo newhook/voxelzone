@@ -231,7 +231,7 @@ export abstract class Tank implements Vehicle {
     this.turretContainer.rotation.y = Math.max(-maxRotation, Math.min(maxRotation, newRotation));
   }
 
-  update(): void {
+  update(delta: number): void {
     // The physics world now handles updating the mesh position
   }
 

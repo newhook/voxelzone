@@ -164,8 +164,8 @@ export class EnemyTank extends Tank {
     return intersections.length === 0;
   }
 
-  update(): void {
-    super.update();
+  update(delta: number): void {
+    super.update(delta);
 
     const currentTime = Date.now();
     const timeSinceLastUpdate = currentTime - this.lastAIUpdate;
