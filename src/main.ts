@@ -107,7 +107,7 @@ async function init() {
   }
 
   // Start the animation loop
-  // animate();
+  // animate2();
   animate();
 
   // Handle window resize

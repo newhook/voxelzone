@@ -11,10 +11,10 @@ import { createBarrier, createBuilding, createFortress, createTree, createBush, 
     createSafeZone(20);
     
     // Create 4 distinct quadrants with different environments
-    createForestZone(voxelWorld, radius, 0, Math.PI/2);           // Northeast quadrant: Dense forest
-    createUrbanZone(voxelWorld, radius, Math.PI/2, Math.PI);      // Northwest quadrant: Urban area
-    createDesertZone(voxelWorld, radius, Math.PI, 3*Math.PI/2);   // Southwest quadrant: Desert with rock formations
-    createMountainZone(voxelWorld, radius, 3*Math.PI/2, 2*Math.PI); // Southeast quadrant: Rocky mountain area
+    // createForestZone(voxelWorld, radius, 0, Math.PI/2);           // Northeast quadrant: Dense forest
+    // createUrbanZone(voxelWorld, radius, Math.PI/2, Math.PI);      // Northwest quadrant: Urban area
+    // createDesertZone(voxelWorld, radius, Math.PI, 3*Math.PI/2);   // Southwest quadrant: Desert with rock formations
+    // createMountainZone(voxelWorld, radius, 3*Math.PI/2, 2*Math.PI); // Southeast quadrant: Rocky mountain area
     
     // Create connecting roadways between quadrants
     createRoadways(voxelWorld, radius);
@@ -46,7 +46,7 @@ import { createBarrier, createBuilding, createFortress, createTree, createBush, 
       const patchRadius = 15 + Math.random() * 10;
       
       // Create a dense cluster of trees in this patch
-      const treeCount = Math.floor(patchRadius * 1.5);
+      const treeCount = Math.floor(patchRadius * 0.7);
       for (let i = 0; i < treeCount; i++) {
         const angle = Math.random() * Math.PI * 2;
         const distance = Math.random() * patchRadius;
@@ -126,17 +126,17 @@ import { createBarrier, createBuilding, createFortress, createTree, createBush, 
           if (distanceFromOrigin < 30 || distanceFromOrigin > urbanRadius) continue;
           
           // Randomly decide whether to place a building or barrier
-          if (Math.random() > 0.4) {
+          if (Math.random() > 0.1) {
             createBuilding(voxelWorld, x, z);
             
             // Sometimes add barriers around buildings for cover
-            if (Math.random() > 0.5) {
+            if (Math.random() > 0.2) {
               const barrierOffset = 8;
               const barrierX = x + Math.floor((Math.random() - 0.5) * barrierOffset);
               const barrierZ = z + Math.floor((Math.random() - 0.5) * barrierOffset);
               createBarrier(voxelWorld, barrierX, barrierZ);
             }
-          } else if (Math.random() > 0.5) {
+          } else if (Math.random() > 0.3) {
             createBarrier(voxelWorld, x, z);
           }
         }
@@ -263,7 +263,7 @@ import { createBarrier, createBuilding, createFortress, createTree, createBush, 
     const rangeCenterZ = Math.floor(Math.sin(rangeAngle) * rangeDistance);
     
     // Create a line of rock formations to form a mountain ridge
-    const ridgeLength = 80;
+    const ridgeLength = 60;
     const ridgeDirection = Math.random() * Math.PI;
     
     for (let i = -ridgeLength/2; i < ridgeLength/2; i += 5) {
@@ -291,7 +291,7 @@ import { createBarrier, createBuilding, createFortress, createTree, createBush, 
         }
         
         // Occasionally add pine trees to the mountain
-        if (Math.random() > 0.7) {
+        if (Math.random() > 0.4) {
           const treeOffsetAngle = Math.random() * Math.PI * 2;
           const treeOffsetDistance = 6 + Math.random() * 4;
           const treeX = Math.floor(ridgeX + Math.cos(treeOffsetAngle) * treeOffsetDistance);
