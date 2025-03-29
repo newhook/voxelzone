@@ -47,7 +47,7 @@ export class PlayState implements IGameState {
   public voxelWorld: VoxelWorld; // New property for voxel world
   
   // Physics debug visualization properties
-  private physicsDebugRenderer: THREE.Mesh | null = null;
+  private physicsDebugRenderer: THREE.LineSegments | null = null;
 
   constructor(gameStateManager: GameStateManager) {
     // Create scene
@@ -1509,9 +1509,6 @@ export class PlayState implements IGameState {
   }
 
   private toggleDebugPhysics(isDebugMode: boolean): void {
-    // Set debug mode in voxel world
-    this.voxelWorld.setDebugPhysics(isDebugMode);
-
     // Clean up existing physics debug renderer if it exists
     if (this.physicsDebugRenderer) {
       this.scene.remove(this.physicsDebugRenderer);
