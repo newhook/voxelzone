@@ -158,15 +158,11 @@ export function createBoundaryWalls(radius: number, wallHeight: number, wallThic
     // Create the collider attached to the rigid body
     world.createCollider(colliderDesc, body);
     
-    let rot = wallRotation
     // Create wall object
     const wallObject: GameObject = {
       mesh,
       body,
-      update: (delta: number) => {
-        // rot = rot + delta
-        // mesh.rotation.y = rot
-      }
+      update: (delta: number) => {}
     };
     
     walls.push(wallObject);

@@ -1431,6 +1431,17 @@ export class PlayState implements IGameState {
 
   // Helper method to check if a position is valid for spawning an enemy
   private isValidSpawnPosition(position: THREE.Vector3): boolean {
+    // Check if position is within the circular arena boundary
+    const distanceFromOrigin = Math.sqrt(
+      position.x * position.x + position.z * position.z
+    );
+    const halfWorldSize = this.config.worldSize / 2 - 20;
+    
+    // If outside the arena boundary, it's not valid
+    if (distanceFromOrigin > halfWorldSize) {
+      return false;
+    }
+
     // Check distance from player (minimum 100 units/meters)
     const distanceToPlayer = position.distanceTo(this.player.mesh.position);
     if (distanceToPlayer < 100) {
@@ -1443,7 +1454,6 @@ export class PlayState implements IGameState {
       if (!obstacle.body || obstacle === this.terrain[this.terrain.length - 1]) {
         continue;
       }
-
       const obstaclePos = obstacle.body.translation();
       const obstacleSize = 5; // Approximate size of obstacles
 
