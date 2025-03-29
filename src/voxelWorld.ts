@@ -36,8 +36,6 @@ export class VoxelWorld {
   private config: GameConfig;
   private materialMeshes: THREE.MeshStandardMaterial[] = [];
   private geometry: THREE.BoxGeometry;
-  private debugPhysics: boolean = false;
-  private debugMeshes: THREE.Mesh[] = [];
 
   constructor(playState : PlayState, scene: THREE.Scene, physicsWorld: PhysicsWorld, config: GameConfig) {
     this.state = playState;
@@ -62,30 +60,6 @@ export class VoxelWorld {
         });
         this.materialMeshes[materialType as number] = meshMaterial;
       });
-  }
-
-  // Enable or disable physics debug visualization
-  setDebugPhysics(enabled: boolean): void {
-    this.debugPhysics = enabled;
-
-    // Clear existing debug meshes if turning off
-    if (!enabled) {
-      this.clearDebugMeshes();
-      return;
-    }
-
-    // Re-render all chunks to show debug visualization
-    for (const chunk of this.chunks.values()) {
-      chunk.dirty = true;
-    }
-  }
-
-  // Clear all debug visualization meshes
-  private clearDebugMeshes(): void {
-    for (const mesh of this.debugMeshes) {
-      this.scene.remove(mesh);
-    }
-    this.debugMeshes = [];
   }
 
   // Get or create a chunk at the specified position
@@ -282,22 +256,6 @@ export class VoxelWorld {
 
           const keyStr = `${localPos.x},${localPos.y},${localPos.z}`;
           chunk.physicsObjects.set(keyStr, gameObj);
-
-          // Add debug visualization if debug mode is enabled
-          if (this.debugPhysics) {
-            const debugGeometry = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE);
-            const debugMaterial = new THREE.MeshBasicMaterial({
-              color: 0xff0000,
-              wireframe: true,
-              transparent: true,
-              opacity: 0.7
-            });
-
-            const debugMesh = new THREE.Mesh(debugGeometry, debugMaterial);
-            debugMesh.position.copy(worldPos);
-            this.scene.add(debugMesh);
-            this.debugMeshes.push(debugMesh);
-          }
         }
       });
 
@@ -774,23 +732,6 @@ export class VoxelWorld {
     const mesh = new THREE.Mesh(geometry, meshMaterial);
     mesh.position.copy(worldPos);
 
-    // Create debug visualization if debug mode is enabled
-    let debugMesh: THREE.Mesh | null = null;
-    if (this.debugPhysics) {
-      const debugGeometry = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE);
-      const debugMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff0000,
-        wireframe: true,
-        transparent: true,
-        opacity: 0.7
-      });
-
-      debugMesh = new THREE.Mesh(debugGeometry, debugMaterial);
-      debugMesh.position.copy(worldPos);
-      this.scene.add(debugMesh);
-      this.debugMeshes.push(debugMesh);
-    }
-
     // Create the game object
     const gameObj: GameObject = {
       mesh,
@@ -804,22 +745,10 @@ export class VoxelWorld {
         const rotation = body.rotation();
         mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
 
-        // Update debug mesh if it exists
-        if (debugMesh) {
-          debugMesh.position.copy(mesh.position);
-          debugMesh.quaternion.copy(mesh.quaternion);
-        }
 
         // Remove if fallen too far (cleanup)
         if (position.y < -20) {
           this.state.removeDebris(gameObj);
-          if (debugMesh) {
-            this.scene.remove(debugMesh);
-            const index = this.debugMeshes.indexOf(debugMesh);
-            if (index !== -1) {
-              this.debugMeshes.splice(index, 1);
-            }
-          }
           return false; // Signal that this object should be removed
         }
 

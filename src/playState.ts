@@ -45,6 +45,9 @@ export class PlayState implements IGameState {
   private previousEnemyCount: number = 0;
 
   public voxelWorld: VoxelWorld; // New property for voxel world
+  
+  // Physics debug visualization properties
+  private physicsDebugRenderer: THREE.LineSegments | null = null;
 
   constructor(gameStateManager: GameStateManager) {
     // Create scene
@@ -323,6 +326,40 @@ export class PlayState implements IGameState {
     this.handleInput(this.input!);
 
     this.physicsWorld.update(deltaTime);
+
+    // Update physics debug rendering if enabled
+    if (this.physicsDebugRenderer) {
+      // Get fresh debug rendering data
+      const buffers = this.physicsWorld.world.debugRender();
+      
+      // Update the geometry with new vertex data
+      const positions = this.physicsDebugRenderer.geometry.getAttribute('position');
+      const colors = this.physicsDebugRenderer.geometry.getAttribute('color');
+      
+      // Make sure buffer sizes match
+      if (positions.array.length === buffers.vertices.length && 
+          colors.array.length === buffers.colors.length) {
+        
+        // Update position and color data
+        positions.array.set(buffers.vertices);
+        positions.needsUpdate = true;
+        
+        colors.array.set(buffers.colors);
+        colors.needsUpdate = true;
+      } else {
+        // Buffer sizes changed, create new geometry
+        const vertices = new Float32Array(buffers.vertices);
+        const newColors = new Float32Array(buffers.colors);
+        
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(newColors, 4));
+        
+        // Replace the old geometry
+        this.physicsDebugRenderer.geometry.dispose();
+        this.physicsDebugRenderer.geometry = geometry;
+      }
+    }
 
     // Update player and enemies
     this.player.update(deltaTime);
@@ -1472,8 +1509,43 @@ export class PlayState implements IGameState {
   }
 
   private toggleDebugPhysics(isDebugMode: boolean): void {
-    // Set debug mode in voxel world
-    this.voxelWorld.setDebugPhysics(isDebugMode);
+    // Clean up existing physics debug renderer if it exists
+    if (this.physicsDebugRenderer) {
+      if (this.physicsDebugRenderer.geometry) {
+        this.physicsDebugRenderer.geometry.dispose();
+      }
+      // if (this.physicsDebugRenderer.material) {
+        // this.physicsDebugRenderer.material.dispose();
+      // }
+      this.scene.remove(this.physicsDebugRenderer);
+      this.physicsDebugRenderer = null;
+    }
+
+    // If debug mode is enabled, create the debug renderer
+    if (isDebugMode) {
+      // Use RAPIER.World.debugRender() to get physics visualization
+      const buffers = this.physicsWorld.world.debugRender();
+      
+      // Create debug rendering geometry
+      const vertices = new Float32Array(buffers.vertices);
+      const colors = new Float32Array(buffers.colors);
+      
+      // Create buffer geometry and set attributes
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4));
+      
+      // Create material with vertex colors
+      const material = new THREE.LineBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.7
+      });
+      
+      // Create the debug renderer mesh and add it to the scene
+      this.physicsDebugRenderer = new THREE.LineSegments(geometry, material);
+      this.scene.add(this.physicsDebugRenderer);
+    }
 
     // Create a notification about debug physics mode
     const debugNotification = document.createElement('div');
