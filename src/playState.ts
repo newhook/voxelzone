@@ -376,7 +376,6 @@ export class PlayState implements IGameState {
       }
     });
 
-
     // Update projectiles
     this.updateProjectiles(deltaTime);
 
@@ -1785,5 +1784,71 @@ export class PlayState implements IGameState {
         }
       }
     }
+  }
+
+  private toggleDebugPhysics(isDebugMode: boolean): void {
+    // Clean up existing physics debug renderer if it exists
+    if (this.physicsDebugRenderer) {
+      if (this.physicsDebugRenderer.geometry) {
+        this.physicsDebugRenderer.geometry.dispose();
+      }
+      // if (this.physicsDebugRenderer.material) {
+        // this.physicsDebugRenderer.material.dispose();
+      // }
+      this.scene.remove(this.physicsDebugRenderer);
+      this.physicsDebugRenderer = null;
+    }
+
+    // If debug mode is enabled, create the debug renderer
+    if (isDebugMode) {
+      // Use RAPIER.World.debugRender() to get physics visualization
+      const buffers = this.physicsWorld.world.debugRender();
+      
+      // Create debug rendering geometry
+      const vertices = new Float32Array(buffers.vertices);
+      const colors = new Float32Array(buffers.colors);
+      
+      // Create buffer geometry and set attributes
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4));
+      
+      // Create material with vertex colors
+      const material = new THREE.LineBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.7
+      });
+      
+      // Create the debug renderer mesh and add it to the scene
+      this.physicsDebugRenderer = new THREE.LineSegments(geometry, material);
+      this.scene.add(this.physicsDebugRenderer);
+    }
+
+    // Create a notification about debug physics mode
+    const debugNotification = document.createElement('div');
+    debugNotification.style.position = 'absolute';
+    debugNotification.style.top = '170px';
+    debugNotification.style.left = '10px';
+    debugNotification.style.color = '#ff0000';
+    debugNotification.style.fontFamily = 'monospace';
+    debugNotification.style.fontSize = '16px';
+    debugNotification.style.padding = '5px';
+    debugNotification.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    debugNotification.style.border = '1px solid #ff0000';
+    debugNotification.style.transition = 'opacity 0.5s ease-in-out';
+    debugNotification.style.opacity = '1';
+    debugNotification.textContent = isDebugMode ? 'PHYSICS DEBUG MODE: ON' : 'PHYSICS DEBUG MODE: OFF';
+
+    document.body.appendChild(debugNotification);
+
+    // Fade out after 2 seconds
+    setTimeout(() => {
+      debugNotification.style.opacity = '0';
+      // Remove from DOM after fade out
+      setTimeout(() => {
+        document.body.removeChild(debugNotification);
+      }, 500);
+    }, 2000);
   }
 }
