@@ -64,6 +64,7 @@ async function init() {
     }
   }
 
+
   // Set up animation loop
   function animate() {
     requestAnimationFrame(animate);

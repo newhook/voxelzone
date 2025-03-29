@@ -45,14 +45,16 @@ export class PlayState implements IGameState {
   private previousEnemyCount: number = 0;
 
   public voxelWorld: VoxelWorld; // New property for voxel world
-  
+
   // Physics debug visualization properties
   private physicsDebugRenderer: THREE.LineSegments | null = null;
+  private physicsCounterElement: HTMLElement | null;
 
   constructor(gameStateManager: GameStateManager) {
     // Create scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x87ceeb); // Light sky blue
+    this.physicsCounterElement = document.getElementById('physics-counter');
 
     // Setup game state with configuration
     this.config = {
@@ -318,9 +320,18 @@ export class PlayState implements IGameState {
     }
   }
 
+  // Update physics objects counter
+  updatePhysicsCounter(): void {
+    if (this.physicsCounterElement) {
+      const count = this.physicsWorld.getPhysicsObjectCount();
+      this.physicsCounterElement.textContent = `PHYSICS OBJECTS: ${count}`;
+    }
+  }
+
   update(deltaTime: number): void {
     if (this.gameOver) return;
 
+    this.updatePhysicsCounter();
     this.voxelWorld.update(deltaTime);
 
     this.handleInput(this.input!);
@@ -331,30 +342,30 @@ export class PlayState implements IGameState {
     if (this.physicsDebugRenderer) {
       // Get fresh debug rendering data
       const buffers = this.physicsWorld.world.debugRender();
-      
+
       // Update the geometry with new vertex data
       const positions = this.physicsDebugRenderer.geometry.getAttribute('position');
       const colors = this.physicsDebugRenderer.geometry.getAttribute('color');
-      
+
       // Make sure buffer sizes match
-      if (positions.array.length === buffers.vertices.length && 
-          colors.array.length === buffers.colors.length) {
-        
+      if (positions.array.length === buffers.vertices.length &&
+        colors.array.length === buffers.colors.length) {
+
         // Update position and color data
         positions.array.set(buffers.vertices);
         positions.needsUpdate = true;
-        
+
         colors.array.set(buffers.colors);
         colors.needsUpdate = true;
       } else {
         // Buffer sizes changed, create new geometry
         const vertices = new Float32Array(buffers.vertices);
         const newColors = new Float32Array(buffers.colors);
-        
+
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
         geometry.setAttribute('color', new THREE.BufferAttribute(newColors, 4));
-        
+
         // Replace the old geometry
         this.physicsDebugRenderer.geometry.dispose();
         this.physicsDebugRenderer.geometry = geometry;
@@ -853,10 +864,12 @@ export class PlayState implements IGameState {
     // Show gameplay UI elements
     const scoreElement = document.getElementById('score');
     const fpsElement = document.getElementById('fps');
+    const physicsCounterElement = document.getElementById('physics-counter');
     const instructionsElement = document.getElementById('instructions');
 
     if (scoreElement) scoreElement.style.opacity = '1';
     if (fpsElement) fpsElement.style.opacity = '1';
+    if (physicsCounterElement) physicsCounterElement.style.opacity = '1';
     if (instructionsElement) {
       instructionsElement.style.display = 'block';
       instructionsElement.style.opacity = '1';
@@ -896,12 +909,14 @@ export class PlayState implements IGameState {
     // Hide UI elements
     const scoreElement = document.getElementById('score');
     const fpsElement = document.getElementById('fps');
+    const physicsCounterElement = document.getElementById('physics-counter');
     const instructionsElement = document.getElementById('instructions');
     const coordDisplay = document.getElementById('coordinates');
     const healthDisplay = document.getElementById('health-display');
 
     if (fpsElement) fpsElement.style.opacity = '0';
     if (scoreElement) scoreElement.style.opacity = '0';
+    if (physicsCounterElement) physicsCounterElement.style.opacity = '0';
     if (instructionsElement) instructionsElement.style.opacity = '0';
     if (coordDisplay) coordDisplay.style.opacity = '0';
     if (healthDisplay) {
@@ -1360,7 +1375,7 @@ export class PlayState implements IGameState {
         this.physicsDebugRenderer.geometry.dispose();
       }
       // if (this.physicsDebugRenderer.material) {
-        // this.physicsDebugRenderer.material.dispose();
+      // this.physicsDebugRenderer.material.dispose();
       // }
       this.scene.remove(this.physicsDebugRenderer);
       this.physicsDebugRenderer = null;
@@ -1370,23 +1385,23 @@ export class PlayState implements IGameState {
     if (isDebugMode) {
       // Use RAPIER.World.debugRender() to get physics visualization
       const buffers = this.physicsWorld.world.debugRender();
-      
+
       // Create debug rendering geometry
       const vertices = new Float32Array(buffers.vertices);
       const colors = new Float32Array(buffers.colors);
-      
+
       // Create buffer geometry and set attributes
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
       geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4));
-      
+
       // Create material with vertex colors
       const material = new THREE.LineBasicMaterial({
         vertexColors: true,
         transparent: true,
         opacity: 0.7
       });
-      
+
       // Create the debug renderer mesh and add it to the scene
       this.physicsDebugRenderer = new THREE.LineSegments(geometry, material);
       this.scene.add(this.physicsDebugRenderer);

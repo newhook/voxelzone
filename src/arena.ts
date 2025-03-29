@@ -11,10 +11,10 @@ import { createBarrier, createBuilding, createFortress, createTree, createBush, 
     createSafeZone(20);
     
     // Create 4 distinct quadrants with different environments
-    // createForestZone(voxelWorld, radius, 0, Math.PI/2);           // Northeast quadrant: Dense forest
-    // createUrbanZone(voxelWorld, radius, Math.PI/2, Math.PI);      // Northwest quadrant: Urban area
-    // createDesertZone(voxelWorld, radius, Math.PI, 3*Math.PI/2);   // Southwest quadrant: Desert with rock formations
-    // createMountainZone(voxelWorld, radius, 3*Math.PI/2, 2*Math.PI); // Southeast quadrant: Rocky mountain area
+    createForestZone(voxelWorld, radius, 0, Math.PI/2);           // Northeast quadrant: Dense forest
+    createUrbanZone(voxelWorld, radius, Math.PI/2, Math.PI);      // Northwest quadrant: Urban area
+    createDesertZone(voxelWorld, radius, Math.PI, 3*Math.PI/2);   // Southwest quadrant: Desert with rock formations
+    createMountainZone(voxelWorld, radius, 3*Math.PI/2, 2*Math.PI); // Southeast quadrant: Rocky mountain area
     
     // Create connecting roadways between quadrants
     createRoadways(voxelWorld, radius);

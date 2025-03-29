@@ -25,6 +25,11 @@ export class PhysicsWorld implements PhysicsWorldType {
     this.world.createCollider(groundColliderDesc);
   }
 
+  // Get the count of physics objects
+  getPhysicsObjectCount(): number {
+    return this.bodies.length;
+  }
+
   update(_deltaTime: number): void {
     // Step the physics simulation
     this.world.step(this.eventQueue);
