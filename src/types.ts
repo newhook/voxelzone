@@ -4,7 +4,7 @@ import RAPIER from '@dimforge/rapier3d';
 export interface GameObject {
   mesh: THREE.Mesh;
   body: RAPIER.RigidBody;
-  update?: () => void;
+  update?: (delta: number) => void;
 }
 
 export interface Vehicle extends GameObject {

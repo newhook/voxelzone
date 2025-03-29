@@ -80,7 +80,7 @@ export function createTerrain(positions: THREE.Vector3[], world: RAPIER.World): 
     const terrainBlock: GameObject = {
       mesh,
       body,
-      update: () => {} // Static objects don't need updates
+      update: (delta: number) => {} // Static objects don't need updates
     };
     
     terrain.push(terrainBlock);
@@ -90,8 +90,8 @@ export function createTerrain(positions: THREE.Vector3[], world: RAPIER.World): 
   return terrain;
 }
 
-// Create the game world boundary walls
-export function createBoundaryWalls(size: number, wallHeight: number, wallThickness: number, world: RAPIER.World): GameObject[] {
+// Create the game world circular boundary wall
+export function createBoundaryWalls(radius: number, wallHeight: number, wallThickness: number, world: RAPIER.World): GameObject[] {
   const walls: GameObject[] = [];
   
   // Materials
@@ -102,44 +102,86 @@ export function createBoundaryWalls(size: number, wallHeight: number, wallThickn
     roughness: 0.8
   });
   
-  // Create four walls around the play area
-  const wallPositions = [
-    { pos: new THREE.Vector3(0, 0, size + wallThickness / 2), size: new THREE.Vector3(size * 2 + wallThickness * 2, wallHeight, wallThickness) }, // North wall
-    { pos: new THREE.Vector3(0, 0, -size - wallThickness / 2), size: new THREE.Vector3(size * 2 + wallThickness * 2, wallHeight, wallThickness) }, // South wall
-    { pos: new THREE.Vector3(size + wallThickness / 2, 0, 0), size: new THREE.Vector3(wallThickness, wallHeight, size * 2) }, // East wall
-    { pos: new THREE.Vector3(-size - wallThickness / 2, 0, 0), size: new THREE.Vector3(wallThickness, wallHeight, size * 2) }  // West wall
-  ];
+  // Create a circular wall using segments
+  const segmentCount = 32; // Higher number means smoother circle
+  const angleStep = (Math.PI * 2) / segmentCount;
   
-  wallPositions.forEach(wall => {
-    // Create visual mesh
-    const geometry = new THREE.BoxGeometry(wall.size.x, wall.size.y, wall.size.z);
-    const mesh = new THREE.Mesh(geometry, wallMaterial);
-    mesh.position.copy(wall.pos);
+  for (let i = 0; i < segmentCount; i++) {
+    const angle = i * angleStep;
+    const nextAngle = (i + 1) * angleStep;
     
-    // Create physics body
-    const body = createObstacleBody(
-      { width: wall.size.x, height: wall.size.y, depth: wall.size.z },
-      { x: wall.pos.x, y: wall.pos.y, z: wall.pos.z },
-      world,
+    // Calculate the center angle for this segment
+    const centerAngle = (angle + nextAngle) / 2;
+    
+    // Calculate position for the wall segment using the center angle
+    const posX = Math.cos(centerAngle) * radius;
+    const posZ = Math.sin(centerAngle) * radius;
+    
+    // Calculate chord length (straight-line distance between segment endpoints)
+    const chordLength = 2 * radius * Math.sin(angleStep / 2);
+    
+    // Get the wall rotation angle - make it tangent to the circle
+    const wallRotation = Math.atan2(posX, posZ) + Math.PI / 2;
+    
+    // Calculate quaternion for the rotation
+    const q = new THREE.Quaternion();
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), wallRotation);
+    
+    // Create visual mesh
+    const geometry = new THREE.BoxGeometry(wallThickness, wallHeight, chordLength);
+    const mesh = new THREE.Mesh(geometry, wallMaterial);
+    
+    // Position the mesh
+    mesh.position.set(posX, wallHeight / 2, posZ);
+    mesh.rotation.y = wallRotation;
+    
+    // Create static physics body
+    const rigidBodyDesc = RAPIER.RigidBodyDesc.fixed();
+    rigidBodyDesc.setTranslation(posX, wallHeight / 2, posZ);
+    const body = world.createRigidBody(rigidBodyDesc);
+    
+    // Set rotation on the rigid body
+    body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+    
+    // Create collider with the correct dimensions
+    // Note: Rapier uses half-extents for cuboid colliders
+    const colliderDesc = RAPIER.ColliderDesc.cuboid(
+      wallThickness / 2,  // half width
+      wallHeight / 2,     // half height
+      chordLength / 2     // half depth
     );
     
+    // Set physics properties
+    colliderDesc.setFriction(1.0);
+    colliderDesc.setRestitution(0.0);
+    
+    // Create the collider attached to the rigid body
+    world.createCollider(colliderDesc, body);
+    
+    let rot = wallRotation
     // Create wall object
     const wallObject: GameObject = {
       mesh,
       body,
-      update: () => {} // Static objects don't need updates
+      update: (delta: number) => {
+        // rot = rot + delta
+        // mesh.rotation.y = rot
+      }
     };
     
     walls.push(wallObject);
-  });
+  }
   
   return walls;
 }
 
-// Create ground plane
+// Create circular ground plane
 export function createGround(size: number): GameObject {
-  // Create a more detailed plane for the large terrain
-  const geometry = new THREE.PlaneGeometry(size, size, 128, 128);
+  const radius = size / 2;
+  
+  // Create a circular disc geometry
+  const segments = 64; // Higher number means smoother circle
+  const geometry = new THREE.CircleGeometry(radius, segments);
   
   // Create a grid pattern for the ground
   const material = new THREE.MeshStandardMaterial({ 
@@ -154,11 +196,8 @@ export function createGround(size: number): GameObject {
   mesh.rotation.x = -Math.PI / 2; // Rotate to lie flat on XZ plane
   mesh.position.y = 0;
   
-  // Add a grid helper to help with spatial awareness
-  const gridHelper = new THREE.GridHelper(size, 50, 0x444444, 0x333333);
-  gridHelper.position.y = 0.01; // Slightly above ground to avoid z-fighting
-  gridHelper.rotation.x = -Math.PI / 2; // Rotate to lie flat on XZ plane
-  mesh.add(gridHelper);
+  // Add circular grid helper
+  addCircularGrid(mesh, radius);
   
   // Ground doesn't need a physics body as it's already created in the physics world
   // But we need to satisfy the GameObject interface with a placeholder
@@ -167,6 +206,62 @@ export function createGround(size: number): GameObject {
   return {
     mesh,
     body,
-    update: () => {} // Ground doesn't need updates
+    update: (delta: number) => {} // Ground doesn't need updates
   };
+}
+
+// Add a circular grid to the ground
+function addCircularGrid(parentMesh: THREE.Mesh, radius: number): void {
+  const material = new THREE.LineBasicMaterial({ color: 0x444444 });
+  
+  // Create concentric circles
+  const circleCount = 10;
+  for (let i = 1; i <= circleCount; i++) {
+    const circleRadius = (radius * i) / circleCount;
+    
+    // Create points for the circle
+    const segments = 64;
+    const points = [];
+    for (let j = 0; j <= segments; j++) {
+      const angle = (j / segments) * Math.PI * 2;
+      points.push(new THREE.Vector3(
+        Math.cos(angle) * circleRadius,
+         0, // Will be transformed to match ground plane's rotation
+        Math.sin(angle) * circleRadius
+      ));
+    }
+    
+    const circleGeometry = new THREE.BufferGeometry().setFromPoints(points);
+    const circle = new THREE.Line(circleGeometry, material);
+    
+    // Apply the same rotation as the parent mesh
+    circle.rotation.x = -Math.PI / 2; // Match the ground plane rotation
+    
+    // Lift slightly to avoid z-fighting
+    circle.position.y = 0.01;
+    
+    parentMesh.add(circle);
+  }
+  
+  // Create radial lines
+  const radialCount = 16;
+  const angleStep = (Math.PI * 2) / radialCount;
+  
+  for (let i = 0; i < radialCount; i++) {
+    const angle = i * angleStep;
+    const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius)
+    ]);
+    
+    const line = new THREE.Line(lineGeometry, material);
+    
+    // Apply the same rotation as the parent mesh
+    line.rotation.x = -Math.PI / 2; // Match the ground plane rotation
+    
+    // Lift slightly to avoid z-fighting
+    line.position.y = 0.01;
+    
+    parentMesh.add(line);
+  }
 }
