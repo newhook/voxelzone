@@ -1511,6 +1511,12 @@ export class PlayState implements IGameState {
   private toggleDebugPhysics(isDebugMode: boolean): void {
     // Clean up existing physics debug renderer if it exists
     if (this.physicsDebugRenderer) {
+      if (this.physicsDebugRenderer.geometry) {
+        this.physicsDebugRenderer.geometry.dispose();
+      }
+      // if (this.physicsDebugRenderer.material) {
+        // this.physicsDebugRenderer.material.dispose();
+      // }
       this.scene.remove(this.physicsDebugRenderer);
       this.physicsDebugRenderer = null;
     }
