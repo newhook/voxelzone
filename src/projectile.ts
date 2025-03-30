@@ -151,6 +151,7 @@ export class Projectile implements GameObject {
 
   // Handle collision with other physics objects
   private handleCollision(other: GameObject): void {
+    // console.log("Projectile collision detected with:", other);
     // Prevent multiple collisions from being processed
     if (this.hasCollided) return;
     this.hasCollided = true;
@@ -174,7 +175,7 @@ export class Projectile implements GameObject {
     const voxelPos = worldToVoxel(projectileVector);
 
     // Destroy voxels in a radius around the collision point
-    this.destroyVoxelsInRadius(voxelPos, 1.5);
+    this.destroyVoxelsInRadius(voxelPos, 2);
 
     // Apply explosive force to nearby physics objects
     this.applyExplosiveForce(projectileVector, 10, 300);
@@ -189,7 +190,8 @@ export class Projectile implements GameObject {
       // Get the index of the enemy in the array
       const index = this.state.debris.indexOf(other);
       if (index !== -1) {
-        this.state.handleDebrisHit(index, this.body.translation);
+        const pos = this.body.translation();
+        this.state.handleDebrisHit(index, new THREE.Vector3(pos.x, pos.y, pos.z));
         this.destroy();
         return true;
       }
@@ -205,10 +207,10 @@ export class Projectile implements GameObject {
       const enemyIndex = this.state.enemies.indexOf(other);
       if (enemyIndex !== -1) {
         // Get position for explosion effect
-        const enemyPos = other.body.translation();
+        const pos = other.body.translation();
 
         // Call the PlayState's handleEnemyHit method
-        this.state.handleEnemyHit(enemyIndex, enemyPos);
+        this.state.handleEnemyHit(enemyIndex, new THREE.Vector3(pos.x, pos.y, pos.z));
 
         // Destroy this projectile
         this.destroy();

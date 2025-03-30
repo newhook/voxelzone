@@ -8,10 +8,9 @@ import { IGameState } from './gameStates';
 import { Radar } from './radar';
 import { GameStateManager } from './gameStateManager';
 import { GameConfig, defaultConfig } from './config';
-import { Projectile, ProjectileSource } from './projectile';
 import { VoxelWorld } from './voxelWorld';
+import { createVoxelStructures } from './arena';
 import { createTerrain, createGround, createBoundaryWalls } from './gameObjects';
-import { createBarrier, createBuilding, createFortress, createTree, createBush, createPond, createPineTree, createCactus, createRockFormation } from './voxelObjects';
 
 export class PlayState implements IGameState {
   public gameStateManager: GameStateManager;
@@ -45,14 +44,16 @@ export class PlayState implements IGameState {
   private previousEnemyCount: number = 0;
 
   public voxelWorld: VoxelWorld; // New property for voxel world
-  
+
   // Physics debug visualization properties
   private physicsDebugRenderer: THREE.LineSegments | null = null;
+  private physicsCounterElement: HTMLElement | null;
 
   constructor(gameStateManager: GameStateManager) {
     // Create scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x87ceeb); // Light sky blue
+    this.physicsCounterElement = document.getElementById('physics-counter');
 
     // Setup game state with configuration
     this.config = {
@@ -181,7 +182,7 @@ export class PlayState implements IGameState {
     this.terrain = [...terrain, ...walls, ground];
 
     // Instead of generating voxel terrain, create voxel structures on the regular terrain
-    this.createVoxelStructures(halfWorldSize);
+    createVoxelStructures(this.voxelWorld, halfWorldSize);
 
     const playerPosition = new THREE.Vector3(0, 0.4, 0);
     // Create player tank at valid position
@@ -318,9 +319,18 @@ export class PlayState implements IGameState {
     }
   }
 
+  // Update physics objects counter
+  updatePhysicsCounter(): void {
+    if (this.physicsCounterElement) {
+      const count = this.physicsWorld.getPhysicsObjectCount();
+      this.physicsCounterElement.textContent = `PHYSICS OBJECTS: ${count}`;
+    }
+  }
+
   update(deltaTime: number): void {
     if (this.gameOver) return;
 
+    this.updatePhysicsCounter();
     this.voxelWorld.update(deltaTime);
 
     this.handleInput(this.input!);
@@ -331,30 +341,30 @@ export class PlayState implements IGameState {
     if (this.physicsDebugRenderer) {
       // Get fresh debug rendering data
       const buffers = this.physicsWorld.world.debugRender();
-      
+
       // Update the geometry with new vertex data
       const positions = this.physicsDebugRenderer.geometry.getAttribute('position');
       const colors = this.physicsDebugRenderer.geometry.getAttribute('color');
-      
+
       // Make sure buffer sizes match
-      if (positions.array.length === buffers.vertices.length && 
-          colors.array.length === buffers.colors.length) {
-        
+      if (positions.array.length === buffers.vertices.length &&
+        colors.array.length === buffers.colors.length) {
+
         // Update position and color data
         positions.array.set(buffers.vertices);
         positions.needsUpdate = true;
-        
+
         colors.array.set(buffers.colors);
         colors.needsUpdate = true;
       } else {
         // Buffer sizes changed, create new geometry
         const vertices = new Float32Array(buffers.vertices);
         const newColors = new Float32Array(buffers.colors);
-        
+
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
         geometry.setAttribute('color', new THREE.BufferAttribute(newColors, 4));
-        
+
         // Replace the old geometry
         this.physicsDebugRenderer.geometry.dispose();
         this.physicsDebugRenderer.geometry = geometry;
@@ -375,7 +385,11 @@ export class PlayState implements IGameState {
         obj.update(deltaTime);
       }
     });
-
+    this.debris.forEach(obj => {
+      if (obj.update) {
+        obj.update(deltaTime);
+      }
+    });
 
     // Update projectiles
     this.updateProjectiles(deltaTime);
@@ -496,7 +510,7 @@ export class PlayState implements IGameState {
     }
   }
 
-  public handleDebrisHit(index: number, enemyPos: { x: number, y: number, z: number }): void {
+  public handleDebrisHit(index: number, enemyPos: THREE.Vector3): void {
     const debris = this.debris[index];
     const soundManager = this.gameStateManager.initSoundManager();
     soundManager.playHit();
@@ -518,7 +532,7 @@ export class PlayState implements IGameState {
     }
   }
 
-  public handleEnemyHit(enemyIndex: number, enemyPos: { x: number, y: number, z: number }): void {
+  public handleEnemyHit(enemyIndex: number, enemyPos: THREE.Vector3): void {
     const enemy = this.enemies[enemyIndex];
 
     const soundManager = this.gameStateManager.initSoundManager();
@@ -563,7 +577,7 @@ export class PlayState implements IGameState {
     this.projectiles.splice(index, 1);
   }
 
-  private createExplosion(position: { x: number, y: number, z: number }): void {
+  private createExplosion(position: THREE.Vector3): void {
     const particleCount = 30; // Increased from 20
 
     // Add an explosion flash light
@@ -854,10 +868,12 @@ export class PlayState implements IGameState {
     // Show gameplay UI elements
     const scoreElement = document.getElementById('score');
     const fpsElement = document.getElementById('fps');
+    const physicsCounterElement = document.getElementById('physics-counter');
     const instructionsElement = document.getElementById('instructions');
 
     if (scoreElement) scoreElement.style.opacity = '1';
     if (fpsElement) fpsElement.style.opacity = '1';
+    if (physicsCounterElement) physicsCounterElement.style.opacity = '1';
     if (instructionsElement) {
       instructionsElement.style.display = 'block';
       instructionsElement.style.opacity = '1';
@@ -897,12 +913,14 @@ export class PlayState implements IGameState {
     // Hide UI elements
     const scoreElement = document.getElementById('score');
     const fpsElement = document.getElementById('fps');
+    const physicsCounterElement = document.getElementById('physics-counter');
     const instructionsElement = document.getElementById('instructions');
     const coordDisplay = document.getElementById('coordinates');
     const healthDisplay = document.getElementById('health-display');
 
     if (fpsElement) fpsElement.style.opacity = '0';
     if (scoreElement) scoreElement.style.opacity = '0';
+    if (physicsCounterElement) physicsCounterElement.style.opacity = '0';
     if (instructionsElement) instructionsElement.style.opacity = '0';
     if (coordDisplay) coordDisplay.style.opacity = '0';
     if (healthDisplay) {
@@ -922,13 +940,18 @@ export class PlayState implements IGameState {
   }
 
   public addDebris(debris: GameObject): void {
+    this.debris.push(debris);
     this.physicsWorld.addBody(debris);
     this.scene.add(debris.mesh);
   }
 
   public removeDebris(debris: GameObject): void {
+     // Get the index of the enemy in the array
+     const index = this.debris.indexOf(debris);
+     if (index === -1) return; // Not found
     this.scene.remove(debris.mesh);
     this.physicsWorld.removeBody(debris);
+    this.debris.splice(index, 1);
   }
 
   setupInputHandlers(): InputState {
@@ -1353,160 +1376,6 @@ export class PlayState implements IGameState {
     }, 3000);
   }
 
-  /**
-   * Creates various voxel structures on the existing terrain in a circular pattern
-   * @param radius The radius of the circular playing field
-   */
-  private createVoxelStructures(radius: number): void {
-    // Create a few buildings scattered around the map
-    const buildingCount = 10;
-    for (let i = 0; i < buildingCount; i++) {
-      // Random position within a circular area
-      const angle = Math.random() * Math.PI * 2;
-      const distance = Math.random() * radius * 0.8; // Use 80% of radius to keep away from walls
-      
-      const x = Math.floor(Math.cos(angle) * distance);
-      const z = Math.floor(Math.sin(angle) * distance);
-      
-      // Create a building on this spot
-      createBuilding(this.voxelWorld, x, z);
-    }
-    
-    // Create some barricades/barriers
-    const barrierCount = 15;
-    for (let i = 0; i < barrierCount; i++) {
-      // Random position within a circular area
-      const angle = Math.random() * Math.PI * 2;
-      const distance = Math.random() * radius * 0.85; // Use 85% of radius
-      
-      const x = Math.floor(Math.cos(angle) * distance);
-      const z = Math.floor(Math.sin(angle) * distance);
-      
-      createBarrier(this.voxelWorld, x, z);
-    }
-    
-    // Add trees to the world (both regular and pine trees)
-    const treeCount = 25;
-    for (let i = 0; i < treeCount; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const distance = Math.random() * radius * 0.9; // Using 90% of radius 
-      
-      const x = Math.floor(Math.cos(angle) * distance);
-      const z = Math.floor(Math.sin(angle) * distance);
-      
-      // Check if position is far enough from player spawn (at least 20 units)
-      const distanceFromOrigin = Math.sqrt(x * x + z * z);
-      if (distanceFromOrigin < 20) continue;
-      
-      // Decide between regular and pine trees
-      if (Math.random() > 0.5) {
-        createTree(this.voxelWorld, x, z);
-      } else {
-        createPineTree(this.voxelWorld, x, z);
-      }
-    }
-    
-    // Add bushes (more numerous but smaller)
-    const bushCount = 40;
-    for (let i = 0; i < bushCount; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const distance = Math.random() * radius * 0.95; // Using 95% of radius
-      
-      const x = Math.floor(Math.cos(angle) * distance);
-      const z = Math.floor(Math.sin(angle) * distance);
-      
-      createBush(this.voxelWorld, x, z);
-    }
-    
-    // Add rock formations
-    const rockCount = 15;
-    for (let i = 0; i < rockCount; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const distance = Math.random() * radius * 0.85; // Using 85% of radius
-      
-      const x = Math.floor(Math.cos(angle) * distance);
-      const z = Math.floor(Math.sin(angle) * distance);
-      
-      createRockFormation(this.voxelWorld, x, z);
-    }
-    
-    // Add a few cacti in a desert sector of the circle
-    const cactusCount = 10;
-    const desertSectorStart = Math.PI / 4; // Start the desert at 45 degrees
-    const desertSectorSize = Math.PI / 2; // Desert covers 90 degrees of the circle
-    
-    for (let i = 0; i < cactusCount; i++) {
-      // Place cacti in a desert sector
-      const angle = desertSectorStart + (Math.random() * desertSectorSize);
-      const distance = (radius * 0.5) + (Math.random() * radius * 0.4); // Between 50% and 90% of radius
-      
-      const x = Math.floor(Math.cos(angle) * distance);
-      const z = Math.floor(Math.sin(angle) * distance);
-      
-      createCactus(this.voxelWorld, x, z);
-    }
-    
-    // Add a few ponds
-    const pondCount = 5;
-    for (let i = 0; i < pondCount; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const distance = Math.random() * radius * 0.7; // Using 70% of radius to keep ponds more central
-      
-      const x = Math.floor(Math.cos(angle) * distance);
-      const z = Math.floor(Math.sin(angle) * distance);
-      
-      // Ensure ponds aren't too close to player spawn
-      const distanceFromOrigin = Math.sqrt(x * x + z * z);
-      if (distanceFromOrigin < 30) continue;
-      
-      createPond(this.voxelWorld, x, z);
-    }
-    
-    // Create a fortress at the center
-    createFortress(this.voxelWorld, 0, 0);
-  }
-
-  // Helper method to check if a position is valid for spawning an enemy
-  private isValidSpawnPosition(position: THREE.Vector3): boolean {
-    // Check if position is within the circular arena boundary
-    const distanceFromOrigin = Math.sqrt(
-      position.x * position.x + position.z * position.z
-    );
-    const halfWorldSize = this.config.worldSize / 2 - 20;
-    
-    // If outside the arena boundary, it's not valid
-    if (distanceFromOrigin > halfWorldSize) {
-      return false;
-    }
-
-    // Check distance from player (minimum 100 units/meters)
-    const distanceToPlayer = position.distanceTo(this.player.mesh.position);
-    if (distanceToPlayer < 100) {
-      return false;
-    }
-
-    // Check collision with obstacles
-    for (const obstacle of this.terrain) {
-      // Skip ground and non-collidable objects
-      if (!obstacle.body || obstacle === this.terrain[this.terrain.length - 1]) {
-        continue;
-      }
-      const obstaclePos = obstacle.body.translation();
-      const obstacleSize = 5; // Approximate size of obstacles
-
-      // Simple bounding box collision check
-      const distance = Math.sqrt(
-        Math.pow(position.x - obstaclePos.x, 2) +
-        Math.pow(position.z - obstaclePos.z, 2)
-      );
-
-      if (distance < obstacleSize + 3) { // Adding 3 units buffer
-        return false; // Too close to an obstacle
-      }
-    }
-
-    return true;
-  }
 
   private toggleDebugPhysics(isDebugMode: boolean): void {
     // Clean up existing physics debug renderer if it exists
@@ -1515,7 +1384,7 @@ export class PlayState implements IGameState {
         this.physicsDebugRenderer.geometry.dispose();
       }
       // if (this.physicsDebugRenderer.material) {
-        // this.physicsDebugRenderer.material.dispose();
+      // this.physicsDebugRenderer.material.dispose();
       // }
       this.scene.remove(this.physicsDebugRenderer);
       this.physicsDebugRenderer = null;
@@ -1525,23 +1394,23 @@ export class PlayState implements IGameState {
     if (isDebugMode) {
       // Use RAPIER.World.debugRender() to get physics visualization
       const buffers = this.physicsWorld.world.debugRender();
-      
+
       // Create debug rendering geometry
       const vertices = new Float32Array(buffers.vertices);
       const colors = new Float32Array(buffers.colors);
-      
+
       // Create buffer geometry and set attributes
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
       geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4));
-      
+
       // Create material with vertex colors
       const material = new THREE.LineBasicMaterial({
         vertexColors: true,
         transparent: true,
         opacity: 0.7
       });
-      
+
       // Create the debug renderer mesh and add it to the scene
       this.physicsDebugRenderer = new THREE.LineSegments(geometry, material);
       this.scene.add(this.physicsDebugRenderer);

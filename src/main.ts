@@ -64,6 +64,7 @@ async function init() {
     }
   }
 
+
   // Set up animation loop
   function animate() {
     requestAnimationFrame(animate);
@@ -107,7 +108,7 @@ async function init() {
   }
 
   // Start the animation loop
-  // animate();
+  // animate2();
   animate();
 
   // Handle window resize
