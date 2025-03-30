@@ -11,6 +11,8 @@ import { GameConfig, defaultConfig } from './config';
 import { VoxelWorld } from './voxelWorld';
 import { createVoxelStructures } from './arena';
 import { createTerrain, createGround, createBoundaryWalls } from './gameObjects';
+import { Powerup, PowerupType, PowerupEffect } from './powerup';
+import { voxelToWorld } from './voxel';
 
 export class PlayState implements IGameState {
   public gameStateManager: GameStateManager;
@@ -40,8 +42,15 @@ export class PlayState implements IGameState {
   enemiesDefeated: number = 0;
   levelComplete: boolean = false;
 
-  // Add a property to track visible enemies for radar
-  private previousEnemyCount: number = 0;
+  // Powerup system properties
+  maxPowerupsPerLevel: number = 3; // Maximum allowed per level
+  powerupsRemainingInLevel: number = 3; // Decreases as powerups are used
+  maxPowerupsOnMap : number = 3; // Maximum allowed on map at once
+  powerupSpawnInterval: number = 10; // 10 seconds
+  powerupSpawnTimer : number = 0;
+  powerupLifetime : number = 30; // 30 seconds before despawning
+  powerups : Powerup[] = [];
+  activeEffects : PowerupEffect[] = [];
 
   public voxelWorld: VoxelWorld; // New property for voxel world
 
@@ -193,14 +202,25 @@ export class PlayState implements IGameState {
     // Create base number of enemies for first level after terrain is set up
     for (let i = 0; i < config.baseEnemyCount; i++) {
       // Try to find a valid spawn position
-      let x = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
-      let z = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
-      const position = new THREE.Vector3(x, 0.4, z);
+      let position: THREE.Vector3;
+      let attempts = 0;
+      const maxAttempts = 100; // Prevent infinite loops
 
-      // Check if the position is far enough from the player
-      if (position.distanceTo(this.player.mesh.position) < 100) {
-        // Too close to player, skip this enemy
-        i--; // Try again
+      do {
+        let x = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
+        let z = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
+        position = new THREE.Vector3(x, 0.4, z);
+        attempts++;
+
+        // Break the loop if we've tried too many times to avoid freezing the game
+        if (attempts >= maxAttempts) {
+          console.warn(`Could not find valid spawn position for enemy ${i} after ${maxAttempts} attempts`);
+          break;
+        }
+      } while (!this.isValidSpawnPosition(position));
+
+      // Skip this enemy if we couldn't find a valid position
+      if (attempts >= maxAttempts) {
         continue;
       }
 
@@ -400,15 +420,35 @@ export class PlayState implements IGameState {
     }
 
     // Update radar and play ping sound only when new enemies appear
-    this.radar.update(this.player, this.enemies);
-
-    this.previousEnemyCount = this.enemies.length;
+    this.radar.update(this.player, this.enemies, this.powerups);
 
     // Check for level completion
     if (!this.levelComplete && this.enemies.length === 0) {
       this.levelComplete = true;
       this.showLevelComplete();
     }
+
+    // Handle powerup spawning
+    this.powerupSpawnTimer += deltaTime;
+    if (this.powerupSpawnTimer >= this.powerupSpawnInterval && 
+        this.powerups.length < this.maxPowerupsOnMap && 
+        this.powerupsRemainingInLevel > 0) {
+      this.powerupSpawnTimer = 0;
+      this.spawnPowerup();
+    }
+
+    // Update powerups
+    this.powerups.forEach(powerup => {
+      if (powerup.update) {
+        powerup.update(deltaTime);
+      }
+    });
+
+    // Update active powerup effects
+    this.updatePowerupEffects(deltaTime);
+    
+    // Update powerup counter display
+    this.updatePowerupCounter();
   }
 
   private toggleWireframeMode(scene: THREE.Scene, isWireframe: boolean) {
@@ -561,6 +601,9 @@ export class PlayState implements IGameState {
       // Add score points for a destroyed enemy
       this.score += 100;
       this.updateScoreDisplay();
+      
+      // Update the enemy counter when an enemy is destroyed
+      this.updateEnemyCounter();
     }
   }
 
@@ -701,7 +744,7 @@ export class PlayState implements IGameState {
 
     // Create explosion effect at the player's position
     const playerPos = this.player.body.translation();
-    this.createExplosion({ x: playerPos.x, y: playerPos.y, z: playerPos.z });
+    this.createExplosion(new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z));
 
     // Display health info
     this.showHealthNotification();
@@ -881,8 +924,10 @@ export class PlayState implements IGameState {
     this.input = this.setupInputHandlers();
     this.radar.show();
 
-    // Initialize health display
+    // Initialize health and ammo displays
     this.showHealthNotification();
+    this.updateAmmoDisplay();
+    this.updateEnemyCounter(); // Initialize enemy counter display
 
     // Enable the input cooldown to prevent accidental firing on game start
     this.inputCooldownActive = true;
@@ -945,9 +990,9 @@ export class PlayState implements IGameState {
   }
 
   public removeDebris(debris: GameObject): void {
-     // Get the index of the enemy in the array
-     const index = this.debris.indexOf(debris);
-     if (index === -1) return; // Not found
+    // Get the index of the enemy in the array
+    const index = this.debris.indexOf(debris);
+    if (index === -1) return; // Not found
     this.scene.remove(debris.mesh);
     this.physicsWorld.removeBody(debris);
     this.debris.splice(index, 1);
@@ -1439,5 +1484,510 @@ export class PlayState implements IGameState {
         document.body.removeChild(debugNotification);
       }, 500);
     }, 2000);
+  }
+
+  // Spawn a powerup at a random valid location
+  private spawnPowerup(): void {
+    // Only spawn if we have space for more powerups
+    if (this.powerups.length >= this.maxPowerupsOnMap) {
+      return;
+    }
+
+    // Try to find a valid spawn position
+    const halfWorldSize = this.config.worldSize / 2 - 20;
+    let position: THREE.Vector3;
+    let attempts = 0;
+    const maxAttempts = 100; // Prevent infinite loops
+
+    do {
+      let x = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
+      let z = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
+      position = new THREE.Vector3(x, 1.2, z); // Slightly raised for better visibility
+      attempts++;
+
+      // Break the loop if we've tried too many times to avoid freezing the game
+      if (attempts >= maxAttempts) {
+        console.warn(`Could not find valid spawn position for powerup after ${maxAttempts} attempts`);
+        return;
+      }
+    } while (!this.isValidSpawnPosition(position));
+
+    // Choose a random powerup type
+    const powerupTypes = [
+      PowerupType.HEALTH,
+      PowerupType.AMMO,
+      PowerupType.SPEED,
+      PowerupType.ROTATION
+    ];
+    const randomType = powerupTypes[Math.floor(Math.random() * powerupTypes.length)];
+
+    // Create powerup at the position
+    const powerup = new Powerup(this, position, randomType);
+    this.powerups.push(powerup);
+    this.scene.add(powerup.mesh);
+    this.physicsWorld.addBody(powerup);
+
+    // Create a brief glow effect to highlight the new powerup
+    this.createPowerupSpawnEffect(position, randomType);
+  }
+
+  // Create a visual effect when a powerup spawns
+  private createPowerupSpawnEffect(position: THREE.Vector3, type: PowerupType): void {
+    // Add a pulse of light
+    const color = this.getPowerupColor(type);
+    const light = new THREE.PointLight(color, 5, 15);
+    light.position.copy(position);
+    this.scene.add(light);
+
+    // Fade out the light
+    const startTime = Date.now();
+    const duration = 1000; // 1 second
+
+    const animateLight = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / duration;
+
+      if (progress >= 1) {
+        this.scene.remove(light);
+        return;
+      }
+
+      // Pulse the intensity
+      light.intensity = 5 * (1 - progress);
+
+      requestAnimationFrame(animateLight);
+    };
+
+    animateLight();
+  }
+
+  // Get color for a powerup type
+  private getPowerupColor(type: PowerupType): number {
+    switch (type) {
+      case PowerupType.HEALTH:
+        return 0xff0000; // Red for health
+      case PowerupType.AMMO:
+        return 0xffaa00; // Orange for ammo
+      case PowerupType.SPEED:
+        return 0x00ffff; // Cyan for speed
+      case PowerupType.ROTATION:
+        return 0xffff00; // Yellow for rotation
+      default:
+        return 0xffffff; // White default
+    }
+  }
+
+  // Remove a powerup from the game
+  public removePowerup(powerup: Powerup): void {
+    const index = this.powerups.indexOf(powerup);
+    if (index !== -1) {
+      this.powerups.splice(index, 1);
+      
+      // When a powerup is used (collected by player), decrease remaining count
+      if (powerup.body && powerup.body.userData) {
+        if (powerup.wasCollected) {
+          // Only decrease counter if it was collected by player (not timed out)
+          this.powerupsRemainingInLevel--;
+          
+          // Update the UI
+          this.updatePowerupCounter();
+        }
+      }
+    }
+  }
+
+  // Add a powerup effect to the active effects list
+  public addPowerupEffect(effect: PowerupEffect): void {
+    // Check if we already have an effect of this type
+    const existingEffectIndex = this.activeEffects.findIndex(e => e.type === effect.type);
+
+    if (existingEffectIndex !== -1) {
+      // Replace the existing effect with the new one
+      const existingEffect = this.activeEffects[existingEffectIndex];
+
+      // Call the revert function of the existing effect before removing it
+      if (existingEffect.revertFunction) {
+        existingEffect.revertFunction();
+      }
+
+      this.activeEffects[existingEffectIndex] = effect;
+    } else {
+      // Add as a new effect
+      this.activeEffects.push(effect);
+    }
+
+    // Update the powerup status display
+    this.updatePowerupStatusDisplay();
+  }
+
+  // Update the powerup effects
+  private updatePowerupEffects(deltaTime: number): void {
+    const currentTime = Date.now();
+
+    for (let i = this.activeEffects.length - 1; i >= 0; i--) {
+      const effect = this.activeEffects[i];
+
+      // Check if the effect has expired
+      if (currentTime >= effect.endTime) {
+        // Call the revert function if it exists
+        if (effect.revertFunction) {
+          effect.revertFunction();
+        }
+
+        // Remove the effect
+        this.activeEffects.splice(i, 1);
+
+        // Update the display
+        this.updatePowerupStatusDisplay();
+      }
+    }
+  }
+
+  // Update the UI to show active powerup effects
+  private updatePowerupStatusDisplay(): void {
+    // Remove any existing powerup status display
+    const existingDisplay = document.getElementById('powerup-status');
+    if (existingDisplay) {
+      existingDisplay.remove();
+    }
+
+    // If there are no active effects, we don't need to create a display
+    if (this.activeEffects.length === 0) {
+      return;
+    }
+
+    // Create a container for the powerup status
+    const statusContainer = document.createElement('div');
+    statusContainer.id = 'powerup-status';
+    statusContainer.style.position = 'absolute';
+    statusContainer.style.bottom = '20px';
+    statusContainer.style.right = '20px';
+    statusContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    statusContainer.style.padding = '10px';
+    statusContainer.style.borderRadius = '5px';
+
+    // Create a header for the container
+    const header = document.createElement('div');
+    header.textContent = 'ACTIVE POWERUPS';
+    header.style.color = '#ffffff';
+    header.style.fontFamily = 'monospace';
+    header.style.fontSize = '16px';
+    header.style.marginBottom = '5px';
+    header.style.textAlign = 'center';
+    statusContainer.appendChild(header);
+
+    // Add each active effect to the display
+    this.activeEffects.forEach(effect => {
+      const effectItem = document.createElement('div');
+      effectItem.style.display = 'flex';
+      effectItem.style.alignItems = 'center';
+      effectItem.style.marginBottom = '5px';
+      effectItem.classList.add('powerup-effect-item');
+      effectItem.dataset.type = effect.type;
+      effectItem.dataset.endTime = effect.endTime.toString();
+
+      // Create icon/color indicator
+      const icon = document.createElement('div');
+      icon.style.width = '12px';
+      icon.style.height = '12px';
+      icon.style.backgroundColor = `#${this.getPowerupColor(effect.type).toString(16).padStart(6, '0')}`;
+      icon.style.marginRight = '8px';
+
+      // Create label with time remaining
+      const label = document.createElement('div');
+      label.classList.add('powerup-timer');
+      label.style.color = '#ffffff';
+      label.style.fontFamily = 'monospace';
+      label.style.fontSize = '14px';
+
+      // Calculate time remaining
+      const timeRemaining = Math.max(0, Math.floor((effect.endTime - Date.now()) / 1000));
+
+      // Set the appropriate text based on powerup type
+      switch (effect.type) {
+        case PowerupType.SPEED:
+          label.textContent = `Speed Boost: ${timeRemaining}s`;
+          break;
+        case PowerupType.ROTATION:
+          label.textContent = `Rotation Boost: ${timeRemaining}s`;
+          break;
+      }
+
+      effectItem.appendChild(icon);
+      effectItem.appendChild(label);
+      statusContainer.appendChild(effectItem);
+    });
+
+    document.body.appendChild(statusContainer);
+    
+    // Start the timer update interval if it's not already running
+    if (!this._powerupTimerInterval) {
+      this._powerupTimerInterval = setInterval(() => {
+        this.updatePowerupTimers();
+      }, 1000); // Update every second
+    }
+  }
+  
+  // Add a property to track the timer interval
+  private _powerupTimerInterval: number | null = null;
+  
+  // Update just the timers in the powerup display without recreating the whole display
+  private updatePowerupTimers(): void {
+    const powerupStatus = document.getElementById('powerup-status');
+    if (!powerupStatus) {
+      // Clear the interval if the display doesn't exist anymore
+      if (this._powerupTimerInterval) {
+        clearInterval(this._powerupTimerInterval);
+        this._powerupTimerInterval = null;
+      }
+      return;
+    }
+    
+    const timerElements = powerupStatus.querySelectorAll('.powerup-effect-item');
+    
+    // If no timer elements, clear the interval
+    if (timerElements.length === 0) {
+      if (this._powerupTimerInterval) {
+        clearInterval(this._powerupTimerInterval);
+        this._powerupTimerInterval = null;
+      }
+      return;
+    }
+    
+    timerElements.forEach(item => {
+      // Use dataset to get properties instead of getAttribute to handle camelCase correctly
+      const endTime = parseInt(item.dataset.endTime || '0', 10);
+      const type = item.dataset.type;
+      
+      // Calculate time remaining
+      const timeRemaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+      
+      // Update the timer text
+      const timerLabel = item.querySelector('.powerup-timer');
+      if (timerLabel) {
+        switch (type) {
+          case PowerupType.SPEED:
+            timerLabel.textContent = `Speed Boost: ${timeRemaining}s`;
+            break;
+          case PowerupType.ROTATION:
+            timerLabel.textContent = `Rotation Boost: ${timeRemaining}s`;
+            break;
+        }
+      }
+    });
+  }
+
+  // Show a notification when a powerup is collected
+  public showPowerupNotification(message: string, color: number): void {
+    const notification = document.createElement('div');
+    notification.style.position = 'absolute';
+    notification.style.top = '30%';
+    notification.style.left = '50%';
+    notification.style.transform = 'translate(-50%, -50%)';
+    notification.style.color = `#${color.toString(16).padStart(6, '0')}`;
+    notification.style.fontFamily = 'monospace';
+    notification.style.fontSize = '24px';
+    notification.style.padding = '10px';
+    notification.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    notification.style.border = `2px solid #${color.toString(16).padStart(6, '0')}`;
+    notification.style.borderRadius = '5px';
+    notification.style.textAlign = 'center';
+    notification.style.zIndex = '1000';
+    notification.style.opacity = '1';
+    notification.style.transition = 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out';
+    notification.textContent = message;
+
+    document.body.appendChild(notification);
+
+    // Animate the notification moving up and fading out
+    setTimeout(() => {
+      notification.style.opacity = '0';
+      notification.style.transform = 'translate(-50%, -70%)';
+
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 500);
+    }, 2000);
+  }
+
+  // Check if a spawn position is valid (not inside obstacles, other tanks, etc.)
+  private isValidSpawnPosition(position: THREE.Vector3): boolean {
+    // Check if position is within arena boundaries
+    const halfWorldSize = this.config.worldSize / 2 - 20; // Same calculation used for arena creation
+    const distanceFromCenter = Math.sqrt(position.x * position.x + position.z * position.z);
+    if (distanceFromCenter > halfWorldSize) {
+      // Position is outside the arena
+      return false;
+    }
+
+    // Check distance from player
+    const minPlayerDistance = 15;
+    if (this.player.mesh.position.distanceTo(position) < minPlayerDistance) {
+      return false;
+    }
+
+    // Check distance from enemies
+    const minEnemyDistance = 10;
+    for (const enemy of this.enemies) {
+      if (enemy.mesh.position.distanceTo(position) < minEnemyDistance) {
+        return false;
+      }
+    }
+
+    // Check if position is inside any terrain objects
+    for (const terrainObj of this.terrain) {
+      // Skip ground
+      if (terrainObj === this.terrain[this.terrain.length - 1]) {
+        continue;
+      }
+
+      if (terrainObj.mesh && terrainObj.mesh.geometry) {
+        // Get the size of the terrain object
+        const meshSize = new THREE.Vector3();
+        const boundingBox = new THREE.Box3().setFromObject(terrainObj.mesh);
+        boundingBox.getSize(meshSize);
+
+        // Get the distance from the center of the terrain object
+        const distance = terrainObj.mesh.position.distanceTo(position);
+
+        // If the distance is less than the approximate radius, it's too close
+        const approxRadius = Math.max(meshSize.x, meshSize.z) / 2;
+        if (distance < approxRadius + 2) { // Add a small buffer
+          return false;
+        }
+      }
+    }
+
+    // Check for voxels at the position
+    const voxelResult = this.voxelWorld.raycast(
+      new THREE.Vector3(position.x, position.y + 5, position.z),
+      new THREE.Vector3(0, -1, 0),
+      10
+    );
+
+    if (voxelResult.voxel !== null) {
+      const pos = voxelToWorld(voxelResult.voxel);
+      // Fix: Calculate distance properly from the position to the voxel position
+      const voxelDistance = Math.sqrt(
+        Math.pow(pos.x - position.x, 2) + 
+        Math.pow(pos.z - position.z, 2)
+      );
+      
+      // If there's a voxel within 2 units of the spawn point, it's invalid
+      if (voxelDistance < 2) {
+        return false;
+      }
+    }
+
+    // Check distance from other powerups
+    const minPowerupDistance = 10;
+    for (const powerup of this.powerups) {
+      if (powerup.mesh.position.distanceTo(position) < minPowerupDistance) {
+        return false;
+      }
+    }
+
+    // If all checks pass, the position is valid
+    return true;
+  }
+
+  // Update the UI to show player's ammo count
+  public updateAmmoDisplay(): void {
+    // Remove any existing ammo display
+    const existingDisplay = document.getElementById('ammo-display');
+    if (existingDisplay) {
+      existingDisplay.remove();
+    }
+
+    // Create a container for the ammo display
+    const ammoContainer = document.createElement('div');
+    ammoContainer.id = 'ammo-display';
+    ammoContainer.style.position = 'absolute';
+    ammoContainer.style.top = '150px'; // Increased from 120px to provide more space
+    ammoContainer.style.right = '20px';
+    ammoContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    ammoContainer.style.padding = '10px';
+    ammoContainer.style.borderRadius = '5px';
+    ammoContainer.style.border = '1px solid #ffaa00';
+    ammoContainer.style.color = '#ffaa00';
+    ammoContainer.style.fontFamily = 'monospace';
+    ammoContainer.style.fontSize = '16px';
+    ammoContainer.style.display = 'flex';
+    ammoContainer.style.alignItems = 'center';
+    ammoContainer.style.width = '150px';
+
+    // Create the ammo text container
+    const ammoText = document.createElement('div');
+    ammoText.id = 'ammo-text';
+    ammoText.textContent = `AMMO: ${this.player.currentProjectiles}/${this.player.maxProjectiles}`;
+    ammoContainer.appendChild(ammoText);
+
+    document.body.appendChild(ammoContainer);
+  }
+
+  // Update the UI to show progress toward level completion
+  public updateEnemyCounter(): void {
+    // Remove any existing enemy counter display
+    const existingDisplay = document.getElementById('enemy-counter');
+    if (existingDisplay) {
+      existingDisplay.remove();
+    }
+
+    // Create a container for the enemy counter
+    const counterContainer = document.createElement('div');
+    counterContainer.id = 'enemy-counter';
+    counterContainer.style.position = 'absolute';
+    counterContainer.style.top = '190px'; // Position below ammo display
+    counterContainer.style.right = '20px';
+    counterContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    counterContainer.style.padding = '10px';
+    counterContainer.style.borderRadius = '5px';
+    counterContainer.style.border = '1px solid #ff4444';
+    counterContainer.style.color = '#ff4444';
+    counterContainer.style.fontFamily = 'monospace';
+    counterContainer.style.fontSize = '16px';
+    counterContainer.style.width = '150px';
+    counterContainer.style.textAlign = 'center';
+
+    // Create the counter text
+    const counterText = document.createElement('div');
+    counterText.textContent = `TANKS: ${this.enemies.length}`;
+    counterContainer.appendChild(counterText);
+
+    document.body.appendChild(counterContainer);
+  }
+
+  // Update the powerup counter display
+  private updatePowerupCounter(): void {
+    // Remove any existing powerup counter display
+    const existingDisplay = document.getElementById('powerup-counter');
+    if (existingDisplay) {
+      existingDisplay.remove();
+    }
+
+    // Create a container for the powerup counter
+    const counterContainer = document.createElement('div');
+    counterContainer.id = 'powerup-counter';
+    counterContainer.style.position = 'absolute';
+    counterContainer.style.top = '220px'; // Position below enemy counter
+    counterContainer.style.right = '20px';
+    counterContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    counterContainer.style.padding = '10px';
+    counterContainer.style.borderRadius = '5px';
+    counterContainer.style.border = '1px solid #00ffff';
+    counterContainer.style.color = '#00ffff';
+    counterContainer.style.fontFamily = 'monospace';
+    counterContainer.style.fontSize = '16px';
+    counterContainer.style.width = '150px';
+    counterContainer.style.textAlign = 'center';
+
+    // Create the counter text
+    const counterText = document.createElement('div');
+    counterText.textContent = `POWERUPS: ${this.powerupsRemainingInLevel}`;
+    counterContainer.appendChild(counterText);
+
+    document.body.appendChild(counterContainer);
   }
 }

@@ -1,4 +1,4 @@
-import { Vehicle } from './types';
+import { Vehicle, GameObject } from './types';
 import { SoundManager } from './soundManager';
 import * as THREE from 'three';
 
@@ -7,6 +7,7 @@ export class Radar {
     private maxDistance: number = 200;
     private radarRadius: number = 100;
     private trackedEnemies: Map<Vehicle, HTMLElement> = new Map(); // Track enemies and their corresponding blip elements
+    private trackedPowerups: Map<GameObject, HTMLElement> = new Map(); // Track powerups and their blips
     private soundManager?: SoundManager;
 
     constructor() {
@@ -85,6 +86,16 @@ export class Radar {
                 transform: translate(-50%, -50%);
                 box-shadow: 0 0 4px 2px rgba(255, 0, 0, 0.5);
             }
+            .radar-powerup {
+                position: absolute;
+                width: 8px;
+                height: 8px;
+                background-color: #00ffff;
+                border-radius: 0%; /* Square shape to distinguish from enemies */
+                transform: translate(-50%, -50%) rotate(45deg); /* Diamond shape */
+                box-shadow: 0 0 4px 2px rgba(0, 255, 255, 0.5);
+                animation: pulse 1.5s infinite;
+            }
             .player-indicator {
                 position: absolute;
                 top: 50%;
@@ -104,6 +115,11 @@ export class Radar {
                     transform: rotate(360deg);
                 }
             }
+            @keyframes pulse {
+                0% { transform: translate(-50%, -50%) rotate(45deg) scale(0.8); }
+                50% { transform: translate(-50%, -50%) rotate(45deg) scale(1.2); }
+                100% { transform: translate(-50%, -50%) rotate(45deg) scale(0.8); }
+            }
         `;
     }
 
@@ -113,18 +129,20 @@ export class Radar {
         // Clear all tracked enemies when hiding the radar
         this.clearAllBlips();
         this.trackedEnemies.clear();
+        this.trackedPowerups.clear();
     }
 
     show() : void {
         this.element.style.display = 'block';
     }
 
-    update(player: Vehicle, enemies: Vehicle[]) {
+    update(player: Vehicle, enemies: Vehicle[], powerups: GameObject[] = []) {
         // Get player position
         const playerPos = player.mesh.position;
         
-        // Track which enemies are now visible
+        // Track which enemies and powerups are currently visible
         const currentlyVisibleEnemies = new Set<Vehicle>();
+        const currentlyVisiblePowerups = new Set<GameObject>();
         let newEnemiesDetected = false;
         
         // Add or update blips for each enemy in range
@@ -218,10 +236,97 @@ export class Radar {
         if (newEnemiesDetected && this.soundManager) {
             this.soundManager.playRadarPing();
         }
+
+        // Add or update blips for each powerup in range
+        powerups.forEach(powerup => {
+            // Calculate relative position in world coordinates
+            const relativeX = powerup.mesh.position.x - playerPos.x;
+            const relativeZ = powerup.mesh.position.z - playerPos.z;
+            
+            // Calculate distance
+            const distance = Math.sqrt(relativeX * relativeX + relativeZ * relativeZ);
+            
+            // Skip powerups that are beyond the max distance
+            if (distance > this.maxDistance) {
+                // If this powerup was previously tracked, we need to remove it
+                if (this.trackedPowerups.has(powerup)) {
+                    const blip = this.trackedPowerups.get(powerup)!;
+                    blip.remove();
+                    this.trackedPowerups.delete(powerup);
+                }
+                return;
+            }
+            
+            // Mark this powerup as currently visible
+            currentlyVisiblePowerups.add(powerup);
+            
+            // Check if this powerup is already being tracked
+            if (!this.trackedPowerups.has(powerup)) {
+                // Create blip element with powerup-specific class
+                const blip = document.createElement('div');
+                blip.className = 'radar-powerup'; // Use powerup-specific class
+                this.element.appendChild(blip);
+                
+                // Add to tracked powerups
+                this.trackedPowerups.set(powerup, blip);
+            }
+            
+            // Get the blip element (either existing or newly created)
+            const blip = this.trackedPowerups.get(powerup)!;
+            
+            // Get player's rotation quaternion
+            const playerQuat = player.mesh.quaternion;
+            
+            // Create a vector representing the direction to the powerup in XZ plane
+            const worldDirectionToPowerup = new THREE.Vector3(relativeX, 0, relativeZ);
+            
+            // Convert world direction to player-local direction by applying inverse of player rotation
+            const inversePlayerQuat = playerQuat.clone().invert();
+            const localDirectionToPowerup = worldDirectionToPowerup.clone().applyQuaternion(inversePlayerQuat);
+            
+            // Extract the X and Z components for 2D radar display
+            const localX = localDirectionToPowerup.x;
+            const localZ = localDirectionToPowerup.z;
+            
+            // Scale distance for radar (using the original world distance)
+            const scaledDistance = distance * (this.radarRadius / this.maxDistance);
+            
+            // Calculate 2D distance and angle in local space
+            const localDistance2D = Math.sqrt(localX * localX + localZ * localZ);
+            if (localDistance2D === 0) return; // Avoid division by zero
+            
+            const normalizedX = localX / localDistance2D;
+            const normalizedZ = localZ / localDistance2D;
+            
+            // Calculate radar position
+            // Forward is top of radar (negative Z in local tank space)
+            // Right is right side of radar (positive X in local tank space)
+            // NOTE: We need to negate the X coordinate to correct left-right swapping
+            const radarX = this.radarRadius - normalizedX * scaledDistance;
+            const radarY = this.radarRadius - normalizedZ * scaledDistance;
+            
+            blip.style.left = `${radarX}px`;
+            blip.style.top = `${radarY}px`;
+            
+            // Update distance-based opacity
+            const opacity = 1 - (distance / this.maxDistance);
+            blip.style.opacity = Math.max(0.3, opacity).toString();
+        });
+        
+        // Remove blips for powerups that are no longer visible
+        this.trackedPowerups.forEach((blip, powerup) => {
+            if (!currentlyVisiblePowerups.has(powerup)) {
+                blip.remove();
+                this.trackedPowerups.delete(powerup);
+            }
+        });
     }
     
     private clearAllBlips(): void {
         this.trackedEnemies.forEach((blip) => {
+            blip.remove();
+        });
+        this.trackedPowerups.forEach((blip) => {
             blip.remove();
         });
     }
