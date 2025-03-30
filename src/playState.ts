@@ -1807,7 +1807,7 @@ export class PlayState implements IGameState {
     const ammoContainer = document.createElement('div');
     ammoContainer.id = 'ammo-display';
     ammoContainer.style.position = 'absolute';
-    ammoContainer.style.top = '120px';
+    ammoContainer.style.top = '150px'; // Increased from 120px to provide more space
     ammoContainer.style.right = '20px';
     ammoContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
     ammoContainer.style.padding = '10px';
