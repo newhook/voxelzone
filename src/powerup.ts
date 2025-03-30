@@ -31,6 +31,7 @@ export class Powerup implements GameObject {
   bobHeight: number = 0.3;
   initialY: number;
   spawnTime: number;
+  lifetime: number = 30000; // 30 seconds lifetime
   
   constructor(
     playState: PlayState,
@@ -132,11 +133,21 @@ export class Powerup implements GameObject {
       y: this.initialY,
       z: pos.z
     }, true);
+    
+    // Check if the powerup lifetime has expired
+    if (Date.now() - this.spawnTime > this.lifetime) {
+      this.destroy();
+    }
   }
   
   private handleCollision(other: GameObject): void {
     // Check if the colliding object is the player
     if (other instanceof PlayerTank) {
+      // Mark this powerup as collected by player (not just timed out)
+      if (this.body.userData) {
+        this.body.userData.wasCollected = true;
+      }
+      
       this.applyEffect(other);
       this.destroy();
     }

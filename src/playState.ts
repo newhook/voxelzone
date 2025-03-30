@@ -42,9 +42,13 @@ export class PlayState implements IGameState {
   enemiesDefeated: number = 0;
   levelComplete: boolean = false;
 
-  maxPowerupsOnMap : number = 10;
+  // Powerup system properties
+  maxPowerupsPerLevel: number = 3; // Maximum allowed per level
+  powerupsRemainingInLevel: number = 3; // Decreases as powerups are used
+  maxPowerupsOnMap : number = 3; // Maximum allowed on map at once
   powerupSpawnInterval: number = 10; // 10 seconds
   powerupSpawnTimer : number = 0;
+  powerupLifetime : number = 30; // 30 seconds before despawning
   powerups : Powerup[] = [];
   activeEffects : PowerupEffect[] = [];
 
@@ -430,14 +434,26 @@ export class PlayState implements IGameState {
     }
 
     // Handle powerup spawning
-    this.powerupSpawnTimer += deltaTime
-    if (this.powerupSpawnTimer >= this.powerupSpawnInterval) {
+    this.powerupSpawnTimer += deltaTime;
+    if (this.powerupSpawnTimer >= this.powerupSpawnInterval && 
+        this.powerups.length < this.maxPowerupsOnMap && 
+        this.powerupsRemainingInLevel > 0) {
       this.powerupSpawnTimer = 0;
       this.spawnPowerup();
     }
 
+    // Update powerups
+    this.powerups.forEach(powerup => {
+      if (powerup.update) {
+        powerup.update(deltaTime);
+      }
+    });
+
     // Update active powerup effects
     this.updatePowerupEffects(deltaTime);
+    
+    // Update powerup counter display
+    this.updatePowerupCounter();
   }
 
   private toggleWireframeMode(scene: THREE.Scene, isWireframe: boolean) {
@@ -1571,6 +1587,18 @@ export class PlayState implements IGameState {
     const index = this.powerups.indexOf(powerup);
     if (index !== -1) {
       this.powerups.splice(index, 1);
+      
+      // When a powerup is used (collected by player), decrease remaining count
+      if (powerup.body && powerup.body.userData) {
+        const collisionData = powerup.body.userData;
+        if (collisionData.wasCollected) {
+          // Only decrease counter if it was collected by player (not timed out)
+          this.powerupsRemainingInLevel--;
+          
+          // Update the UI
+          this.updatePowerupCounter();
+        }
+      }
     }
   }
 
@@ -1872,6 +1900,38 @@ export class PlayState implements IGameState {
     // Create the counter text
     const counterText = document.createElement('div');
     counterText.textContent = `TANKS: ${this.enemies.length}`;
+    counterContainer.appendChild(counterText);
+
+    document.body.appendChild(counterContainer);
+  }
+
+  // Update the powerup counter display
+  private updatePowerupCounter(): void {
+    // Remove any existing powerup counter display
+    const existingDisplay = document.getElementById('powerup-counter');
+    if (existingDisplay) {
+      existingDisplay.remove();
+    }
+
+    // Create a container for the powerup counter
+    const counterContainer = document.createElement('div');
+    counterContainer.id = 'powerup-counter';
+    counterContainer.style.position = 'absolute';
+    counterContainer.style.top = '220px'; // Position below enemy counter
+    counterContainer.style.right = '20px';
+    counterContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    counterContainer.style.padding = '10px';
+    counterContainer.style.borderRadius = '5px';
+    counterContainer.style.border = '1px solid #00ffff';
+    counterContainer.style.color = '#00ffff';
+    counterContainer.style.fontFamily = 'monospace';
+    counterContainer.style.fontSize = '16px';
+    counterContainer.style.width = '150px';
+    counterContainer.style.textAlign = 'center';
+
+    // Create the counter text
+    const counterText = document.createElement('div');
+    counterText.textContent = `POWERUPS: ${this.powerupsRemainingInLevel}`;
     counterContainer.appendChild(counterText);
 
     document.body.appendChild(counterContainer);
