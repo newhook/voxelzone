@@ -66,6 +66,8 @@ export class PlayerTank extends Tank {
   // Add projectiles to the player's ammo count
   addProjectiles(count: number): void {
     this.currentProjectiles = Math.min(this.currentProjectiles + count, this.maxProjectiles);
+    // Update the ammo display in the UI
+    this.state.updateAmmoDisplay();
   }
   
   // Override the fire method to use ammo count
