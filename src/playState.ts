@@ -201,14 +201,25 @@ export class PlayState implements IGameState {
     // Create base number of enemies for first level after terrain is set up
     for (let i = 0; i < config.baseEnemyCount; i++) {
       // Try to find a valid spawn position
-      let x = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
-      let z = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
-      const position = new THREE.Vector3(x, 0.4, z);
+      let position: THREE.Vector3;
+      let attempts = 0;
+      const maxAttempts = 100; // Prevent infinite loops
 
-      // Check if the position is far enough from the player
-      if (position.distanceTo(this.player.mesh.position) < 100) {
-        // Too close to player, skip this enemy
-        i--; // Try again
+      do {
+        let x = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
+        let z = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
+        position = new THREE.Vector3(x, 0.4, z);
+        attempts++;
+
+        // Break the loop if we've tried too many times to avoid freezing the game
+        if (attempts >= maxAttempts) {
+          console.warn(`Could not find valid spawn position for enemy ${i} after ${maxAttempts} attempts`);
+          break;
+        }
+      } while (!this.isValidSpawnPosition(position));
+
+      // Skip this enemy if we couldn't find a valid position
+      if (attempts >= maxAttempts) {
         continue;
       }
 

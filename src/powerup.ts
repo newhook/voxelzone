@@ -37,7 +37,6 @@ export class Powerup implements GameObject {
     position: THREE.Vector3,
     type: PowerupType
   ) {
-    console.log('Creating powerup:', type, "at position:", position);
     this.state = playState;
     this.type = type;
     this.initialY = position.y;
@@ -86,11 +85,6 @@ export class Powerup implements GameObject {
   private getGeometryForType(type: PowerupType): THREE.BufferGeometry {
     switch (type) {
       case PowerupType.HEALTH:
-        // Heart-like shape for health (use a scaled cube with cross on top)
-        const healthGroup = new THREE.Group();
-        const baseGeometry = new THREE.BoxGeometry(0.7, 0.7, 0.7);
-        const crossGeometry = new THREE.BoxGeometry(0.2, 0.7, 0.2);
-        
         return new THREE.TetrahedronGeometry(0.7, 1);
       case PowerupType.AMMO:
         return new THREE.OctahedronGeometry(0.6, 1);
