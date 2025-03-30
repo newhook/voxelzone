@@ -1477,7 +1477,6 @@ export class PlayState implements IGameState {
 
   // Spawn a powerup at a random valid location
   private spawnPowerup(): void {
-    console.log("Spawning powerup...");
     // Only spawn if we have space for more powerups
     if (this.powerups.length >= this.maxPowerupsOnMap) {
       return;
