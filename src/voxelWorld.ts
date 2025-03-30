@@ -25,11 +25,12 @@ export interface Chunk {
   voxels: Map<string, VoxelMaterial>; // Map of voxel positions to materials
   mesh: THREE.Group; // Mesh containing all rendered voxels
   dirty: boolean; // Whether the chunk needs to be re-rendered
-  physicsObjects: Map<string, GameObject>; // Physics objects for the chunk
+  physicsChunks: Map<string, GameObject>; // Physics objects for consolidated voxels
+  needsPhysicsUpdate: boolean; // Flag to indicate physics needs updating
 }
 
 export class VoxelWorld {
-  private state : PlayState;
+  private state: PlayState;
   private scene: THREE.Scene;
   private chunks: Map<string, Chunk> = new Map();
   private physicsWorld: PhysicsWorld;
@@ -37,7 +38,7 @@ export class VoxelWorld {
   private materialMeshes: THREE.MeshStandardMaterial[] = [];
   private geometry: THREE.BoxGeometry;
 
-  constructor(playState : PlayState, scene: THREE.Scene, physicsWorld: PhysicsWorld, config: GameConfig) {
+  constructor(playState: PlayState, scene: THREE.Scene, physicsWorld: PhysicsWorld, config: GameConfig) {
     this.state = playState;
     this.scene = scene;
     this.physicsWorld = physicsWorld;
@@ -62,6 +63,217 @@ export class VoxelWorld {
       });
   }
 
+  // Add this method to the VoxelWorld class
+  // This replaces the individual physics creation in the renderChunk method
+  private updateChunkPhysics(chunk: Chunk): void {
+    // Remove existing physics objects
+    for (const gameObj of chunk.physicsChunks.values()) {
+      this.physicsWorld.removeBody(gameObj);
+    }
+    chunk.physicsChunks.clear();
+
+    // Generate optimized physics bodies using greedy meshing approach
+    const physicsChunks = this.generatePhysicsChunks(chunk);
+
+    // Create physics bodies for each consolidated chunk
+    for (const [chunkId, physicsChunk] of physicsChunks) {
+      const material = physicsChunk.material;
+      const voxelProps = voxelProperties[material];
+
+      if (!voxelProps.solid) continue;
+
+      // Calculate dimensions of the consolidated chunk
+      const sizeX = (physicsChunk.maxX - physicsChunk.minX + 1) * VOXEL_SIZE;
+      const sizeY = (physicsChunk.maxY - physicsChunk.minY + 1) * VOXEL_SIZE;
+      const sizeZ = (physicsChunk.maxZ - physicsChunk.minZ + 1) * VOXEL_SIZE;
+
+      // Calculate the center position of the consolidated chunk
+      const centerX = chunk.position.x * CHUNK_SIZE * VOXEL_SIZE +
+        (physicsChunk.minX + (physicsChunk.maxX - physicsChunk.minX) / 2) * VOXEL_SIZE;
+      const centerY = chunk.position.y * CHUNK_SIZE * VOXEL_SIZE +
+        (physicsChunk.minY + (physicsChunk.maxY - physicsChunk.minY) / 2) * VOXEL_SIZE;
+      const centerZ = chunk.position.z * CHUNK_SIZE * VOXEL_SIZE +
+        (physicsChunk.minZ + (physicsChunk.maxZ - physicsChunk.minZ) / 2) * VOXEL_SIZE;
+
+      // Create fixed rigid body for the consolidated chunk
+      const rigidBodyDesc = RAPIER.RigidBodyDesc.fixed()
+        .setTranslation(centerX, centerY, centerZ);
+      const body = this.physicsWorld.world.createRigidBody(rigidBodyDesc);
+
+      // Create cuboid collider with the appropriate size
+      const colliderDesc = RAPIER.ColliderDesc.cuboid(
+        sizeX / 2,
+        sizeY / 2,
+        sizeZ / 2
+      );
+
+      // Set physics properties
+      colliderDesc.setFriction(voxelProps.friction);
+      colliderDesc.setRestitution(voxelProps.restitution);
+      colliderDesc.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.DEFAULT | RAPIER.ActiveCollisionTypes.KINEMATIC_FIXED);
+      colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
+
+      // Create the collider
+      this.physicsWorld.world.createCollider(colliderDesc, body);
+
+      // Create game object
+      const gameObj: GameObject = {
+        mesh: null as any,
+        body,
+        update: () => { } // No updates needed for fixed bodies
+      };
+
+      // Register the consolidated voxel chunk
+      this.physicsWorld.addBody(gameObj);
+      chunk.physicsChunks.set(chunkId, gameObj);
+    }
+
+    chunk.needsPhysicsUpdate = false;
+  }
+
+  // Implement a modified greedy meshing algorithm for physics consolidation
+  private generatePhysicsChunks(chunk: Chunk): Map<string, PhysicsChunk> {
+    const result = new Map<string, PhysicsChunk>();
+    const visited = new Set<string>();
+
+    // Helper to check if a voxel should be included in physics
+    const shouldIncludeInPhysics = (localPos: VoxelCoord): boolean => {
+      const key = getVoxelKey(localPos);
+      if (visited.has(key)) return false;
+
+      const material = chunk.voxels.get(key);
+      return material !== undefined && voxelProperties[material].solid;
+    };
+
+    // Check all voxels in the chunk
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+      for (let y = 0; y < CHUNK_SIZE; y++) {
+        for (let z = 0; z < CHUNK_SIZE; z++) {
+          const currentPos = { x, y, z };
+          const key = getVoxelKey(currentPos);
+
+          if (visited.has(key)) continue;
+
+          const material = chunk.voxels.get(key);
+          if (material === undefined || !voxelProperties[material].solid) {
+            visited.add(key);
+            continue;
+          }
+
+          // Start of a new chunk, find its maximum extent
+          const physicsChunk: PhysicsChunk = {
+            minX: x,
+            minY: y,
+            minZ: z,
+            maxX: x,
+            maxY: y,
+            maxZ: z,
+            material
+          };
+
+          // Try to expand along the X axis first
+          while (physicsChunk.maxX + 1 < CHUNK_SIZE) {
+            const nextPos = {
+              x: physicsChunk.maxX + 1,
+              y,
+              z
+            };
+            const nextKey = getVoxelKey(nextPos);
+            const nextMaterial = chunk.voxels.get(nextKey);
+
+            if (nextMaterial !== material || !shouldIncludeInPhysics(nextPos)) {
+              break;
+            }
+
+            physicsChunk.maxX++;
+            visited.add(nextKey);
+          }
+
+          // Then try to expand along the Z axis
+          let canExpandZ = true;
+          while (canExpandZ && physicsChunk.maxZ + 1 < CHUNK_SIZE) {
+            // Check if entire row can be added
+            for (let checkX = physicsChunk.minX; checkX <= physicsChunk.maxX; checkX++) {
+              const nextPos = {
+                x: checkX,
+                y,
+                z: physicsChunk.maxZ + 1
+              };
+              const nextKey = getVoxelKey(nextPos);
+              const nextMaterial = chunk.voxels.get(nextKey);
+
+              if (nextMaterial !== material || !shouldIncludeInPhysics(nextPos)) {
+                canExpandZ = false;
+                break;
+              }
+            }
+
+            if (canExpandZ) {
+              physicsChunk.maxZ++;
+              // Mark all voxels in this row as visited
+              for (let checkX = physicsChunk.minX; checkX <= physicsChunk.maxX; checkX++) {
+                const nextPos = {
+                  x: checkX,
+                  y,
+                  z: physicsChunk.maxZ
+                };
+                visited.add(getVoxelKey(nextPos));
+              }
+            }
+          }
+
+          // Finally try to expand along the Y axis
+          let canExpandY = true;
+          while (canExpandY && physicsChunk.maxY + 1 < CHUNK_SIZE) {
+            // Check if entire layer can be added
+            for (let checkZ = physicsChunk.minZ; checkZ <= physicsChunk.maxZ; checkZ++) {
+              for (let checkX = physicsChunk.minX; checkX <= physicsChunk.maxX; checkX++) {
+                const nextPos = {
+                  x: checkX,
+                  y: physicsChunk.maxY + 1,
+                  z: checkZ
+                };
+                const nextKey = getVoxelKey(nextPos);
+                const nextMaterial = chunk.voxels.get(nextKey);
+
+                if (nextMaterial !== material || !shouldIncludeInPhysics(nextPos)) {
+                  canExpandY = false;
+                  break;
+                }
+              }
+              if (!canExpandY) break;
+            }
+
+            if (canExpandY) {
+              physicsChunk.maxY++;
+              // Mark all voxels in this layer as visited
+              for (let checkZ = physicsChunk.minZ; checkZ <= physicsChunk.maxZ; checkZ++) {
+                for (let checkX = physicsChunk.minX; checkX <= physicsChunk.maxX; checkX++) {
+                  const nextPos = {
+                    x: checkX,
+                    y: physicsChunk.maxY,
+                    z: checkZ
+                  };
+                  visited.add(getVoxelKey(nextPos));
+                }
+              }
+            }
+          }
+
+          // Add the consolidated physics chunk
+          const chunkId = `${physicsChunk.minX},${physicsChunk.minY},${physicsChunk.minZ}-${physicsChunk.maxX},${physicsChunk.maxY},${physicsChunk.maxZ}`;
+          result.set(chunkId, physicsChunk);
+
+          // Mark current voxel as visited
+          visited.add(key);
+        }
+      }
+    }
+
+    return result;
+  }
+
+
   // Get or create a chunk at the specified position
   getOrCreateChunk(position: { x: number, y: number, z: number }): Chunk {
     const key = `${position.x},${position.y},${position.z}`;
@@ -80,7 +292,8 @@ export class VoxelWorld {
         voxels: new Map<string, VoxelMaterial>(),
         mesh: chunkMesh,
         dirty: false,
-        physicsObjects: new Map<string, GameObject>()
+        physicsChunks: new Map<string, GameObject>(),
+        needsPhysicsUpdate: false
       });
     }
 
@@ -117,19 +330,15 @@ export class VoxelWorld {
     // If material is undefined, remove the voxel
     if (material === undefined) {
       chunk.voxels.delete(key);
-
-      // Remove physics body if it exists
-      if (chunk.physicsObjects.has(key)) {
-        const gameObj = chunk.physicsObjects.get(key)!;
-        this.physicsWorld.removeBody(gameObj);
-        chunk.physicsObjects.delete(key);
-      }
     } else {
       chunk.voxels.set(key, material);
     }
 
-    // Mark the chunk and neighboring chunks as dirty for re-rendering
+    // Mark the chunk as dirty for re-rendering
     chunk.dirty = true;
+
+    // Mark physics needs updating
+    chunk.needsPhysicsUpdate = true;
 
     // Mark neighboring chunks as dirty if the voxel is on the edge
     if (localPos.x === 0 || localPos.x === CHUNK_SIZE - 1 ||
@@ -172,12 +381,6 @@ export class VoxelWorld {
       chunk.mesh.remove(chunk.mesh.children[0]);
     }
 
-    // Clear existing physics objects
-    for (const gameObj of chunk.physicsObjects.values()) {
-      this.physicsWorld.removeBody(gameObj);
-    }
-    chunk.physicsObjects.clear();
-
     // Group voxels by material for better rendering performance
     const voxelsByMaterial: Map<VoxelMaterial, VoxelCoord[]> = new Map();
 
@@ -214,53 +417,15 @@ export class VoxelWorld {
           localPos.z * VOXEL_SIZE
         );
         instancedMesh.setMatrixAt(i, matrix);
-
-        // Create physics body for this voxel if it's solid
-        const voxelProps = voxelProperties[material];
-        if (voxelProps.solid) {
-          const worldPos = voxelToWorld({
-            x: chunk.position.x * CHUNK_SIZE + localPos.x,
-            y: chunk.position.y * CHUNK_SIZE + localPos.y,
-            z: chunk.position.z * CHUNK_SIZE + localPos.z
-          });
-
-          // Create appropriate rigid body type based on fixed property
-          let rigidBodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(worldPos.x, worldPos.y, worldPos.z);
-          const body = this.physicsWorld.world.createRigidBody(rigidBodyDesc);
-
-          // Create the collider
-          const colliderDesc = RAPIER.ColliderDesc.cuboid(
-            VOXEL_SIZE / 2,
-            VOXEL_SIZE / 2,
-            VOXEL_SIZE / 2
-          );
-
-          // Normal bodies use their material properties
-          colliderDesc.setFriction(voxelProps.friction);
-          colliderDesc.setRestitution(voxelProps.restitution);
-          colliderDesc.setActiveCollisionTypes(RAPIER.ActiveCollisionTypes.DEFAULT | RAPIER.ActiveCollisionTypes.KINEMATIC_FIXED)
-          colliderDesc.setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
-
-          // Create the collider
-          this.physicsWorld.world.createCollider(colliderDesc, body);
-
-          // Store physics body
-          const gameObj: GameObject = {
-            mesh: null as any, // We don't need a reference to the mesh
-            body,
-            update: () => { } // No updates needed
-          };
-
-          // Register the voxel with physics world to enable proper collision tracking
-          this.physicsWorld.addBody(gameObj);
-
-          const keyStr = `${localPos.x},${localPos.y},${localPos.z}`;
-          chunk.physicsObjects.set(keyStr, gameObj);
-        }
       });
 
       // Add instanced mesh to chunk
       chunk.mesh.add(instancedMesh);
+    }
+
+    // Update physics if needed
+    if (chunk.needsPhysicsUpdate) {
+      this.updateChunkPhysics(chunk);
     }
 
     chunk.dirty = false;
@@ -296,6 +461,9 @@ export class VoxelWorld {
     for (const chunk of this.chunks.values()) {
       if (chunk.dirty) {
         this.renderChunk(chunk);
+      }
+      if (chunk.needsPhysicsUpdate) {
+        this.updateChunkPhysics(chunk);
       }
     }
     // Apply gravity to voxels if needed
