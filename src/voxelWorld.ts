@@ -596,7 +596,7 @@ export class VoxelWorld {
       }
       y--;
     }
-    return 1; // Default ground level if no terrain found
+    return 0; // Default ground level if no terrain found
   }
 
   // Check for unsupported voxels in a region
