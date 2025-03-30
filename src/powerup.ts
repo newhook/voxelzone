@@ -37,6 +37,7 @@ export class Powerup implements GameObject {
     position: THREE.Vector3,
     type: PowerupType
   ) {
+    console.log('Creating powerup:', type, "at position:", position);
     this.state = playState;
     this.type = type;
     this.initialY = position.y;
@@ -59,7 +60,7 @@ export class Powerup implements GameObject {
     const physicsWorld = this.state.physicsWorld;
     
     // Create rigid body for powerup
-    const rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
+    const rigidBodyDesc = RAPIER.RigidBodyDesc.fixed()
       .setTranslation(position.x, position.y, position.z)
       .setLinearDamping(0.7)
       .setAngularDamping(0.7);
