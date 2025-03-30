@@ -386,7 +386,7 @@ export class VoxelWorld {
 
   // Render a chunk
   renderChunk(chunk: Chunk): void {
-    console.log("Rendering chunk at", chunk.position);
+    // console.log("Rendering chunk at", chunk.position);
     // Remove existing mesh children
     while (chunk.mesh.children.length > 0) {
       chunk.mesh.remove(chunk.mesh.children[0]);
@@ -911,29 +911,46 @@ export class VoxelWorld {
     const mesh = new THREE.Mesh(geometry, meshMaterial);
     mesh.position.copy(worldPos);
 
+    let fadeOut = false;
+    let fadeStartTime: number;
+    const fadeOutDuration = 1000; // 1 second fade
+    const initialOpacity = meshMaterial.opacity;
+
     // Create the game object
     const gameObj: GameObject = {
       mesh,
       body,
       update: () => {
-        // Update mesh position based on physics body
-        const position = body.translation();
-        mesh.position.set(position.x, position.y, position.z);
-
-        // Update mesh rotation based on physics body
-        const rotation = body.rotation();
-        mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
-
-
         // Remove if fallen too far (cleanup)
-        if (position.y < -20) {
+        if (body.translation().y < -20) {
           this.state.removeDebris(gameObj);
           return false; // Signal that this object should be removed
         }
 
+        if (fadeOut) {
+          // Fade out and remove the voxel after a delay
+          const elapsed = Date.now() - fadeStartTime;
+          const progress = Math.min(elapsed / fadeOutDuration, 1);
+
+          // Update opacity
+          meshMaterial.opacity = initialOpacity * (1 - progress);
+
+          // When fade completes
+          if (progress >= 1) {
+            this.state.removeDebris(gameObj);
+            return false;
+          }
+        }
         return true;
       }
     };
+
+    if (Math.random() < 0.9) {
+      setTimeout(() => {
+        fadeOut = true;
+        fadeStartTime = Date.now();
+      }, Math.random() * 1000 + 1000);
+    }
 
     return gameObj;
   }

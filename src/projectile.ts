@@ -151,7 +151,7 @@ export class Projectile implements GameObject {
 
   // Handle collision with other physics objects
   private handleCollision(other: GameObject): void {
-    console.log("Projectile collision detected with:", other);
+    // console.log("Projectile collision detected with:", other);
     // Prevent multiple collisions from being processed
     if (this.hasCollided) return;
     this.hasCollided = true;

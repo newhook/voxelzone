@@ -385,6 +385,11 @@ export class PlayState implements IGameState {
         obj.update(deltaTime);
       }
     });
+    this.debris.forEach(obj => {
+      if (obj.update) {
+        obj.update(deltaTime);
+      }
+    });
 
     // Update projectiles
     this.updateProjectiles(deltaTime);
@@ -935,13 +940,18 @@ export class PlayState implements IGameState {
   }
 
   public addDebris(debris: GameObject): void {
+    this.debris.push(debris);
     this.physicsWorld.addBody(debris);
     this.scene.add(debris.mesh);
   }
 
   public removeDebris(debris: GameObject): void {
+     // Get the index of the enemy in the array
+     const index = this.debris.indexOf(debris);
+     if (index === -1) return; // Not found
     this.scene.remove(debris.mesh);
     this.physicsWorld.removeBody(debris);
+    this.debris.splice(index, 1);
   }
 
   setupInputHandlers(): InputState {
