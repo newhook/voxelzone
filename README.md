@@ -16,6 +16,7 @@ Voxelzone is a first-person tank combat game where players navigate through a di
 - **Dynamic Line-of-Sight**: Enemies can only detect you when they have line of sight
 - **Radar System**: Track enemy positions with the onboard radar
 - **Combat Effects**: Visual effects for projectiles, hits, and tank destruction
+- **Power-ups System**: Collect health, ammo, speed, and rotation boosts throughout the battlefield
 - **Arcade Experience**: Complete with attract mode, game states, and classic sound effects
 
 ## Getting Started
@@ -75,6 +76,8 @@ The built files will be in the `dist` directory.
 - Check your radar frequently to plan your approach
 - Use hit-and-run tactics against multiple enemies
 - Remember that enemies lose track of you if you break line of sight
+- Collect power-ups to gain temporary advantages or replenish resources
+- Different power-ups are color-coded: red (health), orange (ammo), cyan (speed), and yellow (rotation)
 
 ## Environment
 
@@ -100,12 +103,13 @@ The game world is divided into four distinct quadrants:
 - `src/arena.ts` - Environment generation with different zones
 - `src/voxelObjects.ts` - Definitions for voxel-based environment objects
 - `src/physics.ts` - Physics system integration with Rapier
+- `src/powerup.ts` - Power-up items with different effects and behaviors
 - `src/types.ts` - Type definitions for game entities
 
 ## Development Roadmap
 
 - [ ] Additional enemy tank types with varied behaviors
-- [ ] Power-ups and tank upgrades
+- [x] Power-ups and tank upgrades
 - [ ] Multiplayer support
 - [ ] Level progression with increasing difficulty
 - [ ] Additional environments and weather effects
