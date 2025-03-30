@@ -43,7 +43,7 @@ export class PlayState implements IGameState {
   levelComplete: boolean = false;
 
   maxPowerupsOnMap : number = 10;
-  powerupSpawnInterval: number = 10000; // 10 seconds
+  powerupSpawnInterval: number = 10; // 10 seconds
   powerupSpawnTimer : number = 0;
   powerups : Powerup[] = [];
   activeEffects : PowerupEffect[] = [];
@@ -408,7 +408,7 @@ export class PlayState implements IGameState {
     }
 
     // Update radar and play ping sound only when new enemies appear
-    this.radar.update(this.player, this.enemies);
+    this.radar.update(this.player, this.enemies, this.powerups);
 
     this.previousEnemyCount = this.enemies.length;
 
@@ -419,7 +419,7 @@ export class PlayState implements IGameState {
     }
 
     // Handle powerup spawning
-    this.powerupSpawnTimer += deltaTime * 1000; // Convert to milliseconds
+    this.powerupSpawnTimer += deltaTime
     if (this.powerupSpawnTimer >= this.powerupSpawnInterval) {
       this.powerupSpawnTimer = 0;
       this.spawnPowerup();
@@ -1461,6 +1461,7 @@ export class PlayState implements IGameState {
 
   // Spawn a powerup at a random valid location
   private spawnPowerup(): void {
+    console.log("Spawning powerup...");
     // Only spawn if we have space for more powerups
     if (this.powerups.length >= this.maxPowerupsOnMap) {
       return;
