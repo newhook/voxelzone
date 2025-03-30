@@ -191,8 +191,7 @@ export class PlayState implements IGameState {
     this.physicsWorld.addBody(this.player);
 
     // Create base number of enemies for first level after terrain is set up
-    // for (let i = 0; i < config.baseEnemyCount; i++) {
-    for (let i = 0; i < 1; i++) {
+    for (let i = 0; i < config.baseEnemyCount; i++) {
       // Try to find a valid spawn position
       let x = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
       let z = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
@@ -1192,7 +1191,6 @@ export class PlayState implements IGameState {
   }
 
   private showLevelComplete(): void {
-    return
     // Create level complete screen
     const levelCompleteScreen = document.createElement('div');
     levelCompleteScreen.id = 'level-complete-screen';
