@@ -74,6 +74,8 @@ export class PlayerTank extends Tank {
     
     // Deduct a projectile
     this.currentProjectiles--;
+
+    this.state.updateAmmoDisplay();
     
     // Continue with normal firing logic from Tank class
     super.fire();

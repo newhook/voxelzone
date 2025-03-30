@@ -170,15 +170,7 @@ export abstract class Tank implements Vehicle {
 
   fire(): void {
     if (!this.canFire || this.currentProjectiles <= 0) return;
-    
-    // Deduct a projectile
-    this.currentProjectiles--;
-    
-    // Update ammo display
-    if (this.state instanceof PlayState) {
-      this.state.updateAmmoDisplay();
-    }
-    
+
     // Continue with normal firing logic
     // Calculate the cannon tip position in world space
     const cannonWorldPosition = new THREE.Vector3();
