@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Tank } from './tank';
 import { PlayState } from './playState';
 import { Projectile, ProjectileSource } from './projectile';
+import { voxelToWorld } from './voxel';
 
 export class EnemyTank extends Tank {
   targetPosition: THREE.Vector3 | null = null;
@@ -91,14 +92,37 @@ export class EnemyTank extends Tank {
     this.body.wakeUp();
   }
 
-  // Enhanced generateNewPatrolPoint that avoids known obstacles
+  // Significantly improved generateNewPatrolPoint that avoids known obstacles
+  // and prioritizes accessible locations
   generateNewPatrolPoint(): void {
     const currentPos = this.mesh.position;
+    const maxAttempts = 16; // Increased attempt count for better results
     
-    // Try several directions to find one without obstacles
-    for (let attempts = 0; attempts < 8; attempts++) {
-      const angle = Math.random() * Math.PI * 2;
-      const distance = this.minPatrolDistance + Math.random() * (this.patrolRadius - this.minPatrolDistance);
+    // Track all candidate points with their scores
+    const candidates: Array<{
+      point: THREE.Vector3;
+      score: number;
+      pathClearance: number;
+    }> = [];
+    
+    // Try multiple directions to find good patrol points
+    for (let attempts = 0; attempts < maxAttempts; attempts++) {
+      // Use a weighted distribution - favor middle distances over extremely close or far
+      // This helps avoid both getting stuck in tight spots and choosing unreachable distant points
+      const distanceFactor = Math.pow(Math.random(), 0.7); // Bias toward mid-range
+      const distance = this.minPatrolDistance + distanceFactor * (this.patrolRadius - this.minPatrolDistance);
+      
+      // Choose angle with some bias toward forward direction for more natural movement
+      let angle;
+      if (Math.random() > 0.3) {
+        // 70% of the time, choose a point generally ahead of the tank
+        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+        const forwardAngle = Math.atan2(forward.x, forward.z);
+        angle = forwardAngle + (Math.random() - 0.5) * Math.PI; // +/- 90 degrees
+      } else {
+        // 30% of the time, choose a completely random direction
+        angle = Math.random() * Math.PI * 2;
+      }
       
       const potentialTarget = new THREE.Vector3(
         currentPos.x + Math.sin(angle) * distance,
@@ -111,23 +135,140 @@ export class EnemyTank extends Tank {
         .subVectors(potentialTarget, currentPos)
         .normalize();
       
-      // If we don't detect an obstacle, use this patrol point
-      if (!this.hasObstacleInDirection(directionToTarget, Math.min(distance, 15))) {
-        this.targetPosition = potentialTarget;
-        return;
+      // Perform a more detailed check for obstacles
+      const pathDistance = Math.min(distance, 20); // Don't check the entire path for very long distances
+      
+      // If the potential target is inside a voxel or too close to an obstacle, skip it
+      const targetDistToObstacle = this.checkPointClearance(potentialTarget);
+      if (targetDistToObstacle < 3) {
+        continue; // Skip this candidate - it's inside or too close to an obstacle
+      }
+      
+      // Check for direct path obstruction
+      const hasDirectObstacle = this.hasObstacleInDirection(directionToTarget, pathDistance);
+      
+      // Calculate path clearance (max distance to obstacles along path)
+      const pathClearance = hasDirectObstacle ? 0 : this.getPathClearance(currentPos, potentialTarget);
+      
+      // Calculate a score for this candidate point
+      let score = 0;
+      
+      // Base score is related to the distance - prefer points that aren't too close or too far
+      const normalizedDistance = (distance - this.minPatrolDistance) / (this.patrolRadius - this.minPatrolDistance);
+      const distanceScore = 1 - Math.abs(normalizedDistance - 0.5) * 2; // Peak at middle distances
+      score += distanceScore * 20;
+      
+      // Higher score for points with clear paths
+      score += pathClearance * 10;
+      
+      // Bonus for points that are in open areas (away from obstacles)
+      score += targetDistToObstacle * 5;
+      
+      // Big penalty if there's a direct obstacle
+      if (hasDirectObstacle) {
+        score -= 50;
+      }
+      
+      // Add to candidates
+      candidates.push({
+        point: potentialTarget,
+        score: score,
+        pathClearance: pathClearance
+      });
+    }
+    
+    // Sort candidates by score
+    candidates.sort((a, b) => b.score - a.score);
+    
+    // If we have any candidates with decent paths, use the best one
+    if (candidates.length > 0 && candidates[0].score > -20) {
+      this.targetPosition = candidates[0].point;
+      return;
+    }
+    
+    // If all attempts fail, choose a closer destination as fallback
+    // This helps the tank navigate in very cluttered environments
+    const fallbackDistance = this.minPatrolDistance * 0.7;
+    const fallbackAngle = Math.random() * Math.PI * 2;
+    
+    this.targetPosition = new THREE.Vector3(
+      currentPos.x + Math.sin(fallbackAngle) * fallbackDistance,
+      0.4,
+      currentPos.z + Math.cos(fallbackAngle) * fallbackDistance
+    );
+  }
+  
+  // Helper method to check if a point has enough clearance (not inside obstacles)
+  private checkPointClearance(point: THREE.Vector3): number {
+    // Check in multiple directions from this point to find closest obstacle
+    const directions = [
+      new THREE.Vector3(1, 0, 0),
+      new THREE.Vector3(-1, 0, 0),
+      new THREE.Vector3(0, 0, 1),
+      new THREE.Vector3(0, 0, -1),
+      new THREE.Vector3(0.7, 0, 0.7),
+      new THREE.Vector3(0.7, 0, -0.7),
+      new THREE.Vector3(-0.7, 0, 0.7),
+      new THREE.Vector3(-0.7, 0, -0.7)
+    ];
+    
+    // Start position for checking should be slightly above ground
+    const checkPoint = point.clone().add(new THREE.Vector3(0, 0.8, 0));
+    
+    let minDistance = 20; // Max check distance
+    
+    // Check all directions
+    for (const dir of directions) {
+      // Check voxels
+      const voxelResult = this.state.voxelWorld.raycast(checkPoint, dir, 8);
+      if (voxelResult.voxel !== null) {
+        const pos = voxelToWorld(voxelResult.voxel);
+        const dist = checkPoint.distanceTo(pos);
+        minDistance = Math.min(minDistance, dist);
+      }
+      
+      // Check other obstacles
+      const ray = new THREE.Raycaster(checkPoint, dir, 0, 8);
+      
+      // Get obstacle meshes
+      const obstacles = this.state.terrain.filter(obj =>
+        obj !== this.state.terrain[this.state.terrain.length - 1] && // Exclude ground
+        obj.mesh instanceof THREE.Mesh
+      );
+      
+      const obstacleMeshes = obstacles.map(obj => obj.mesh);
+      const hits = ray.intersectObjects(obstacleMeshes, false);
+      
+      if (hits.length > 0) {
+        minDistance = Math.min(minDistance, hits[0].distance);
       }
     }
     
-    // If all attempts fail, just choose a random point
-    // This will eventually lead to finding a better path through obstacle avoidance
-    const angle = Math.random() * Math.PI * 2;
-    const distance = this.minPatrolDistance + Math.random() * (this.patrolRadius - this.minPatrolDistance);
+    return minDistance;
+  }
+  
+  // Helper to check path clearance by sampling points along the path
+  private getPathClearance(start: THREE.Vector3, end: THREE.Vector3): number {
+    const direction = new THREE.Vector3().subVectors(end, start).normalize();
+    const distance = start.distanceTo(end);
     
-    this.targetPosition = new THREE.Vector3(
-      currentPos.x + Math.sin(angle) * distance,
-      0.4,
-      currentPos.z + Math.cos(angle) * distance
-    );
+    // Sample several points along the path
+    const samples = 5;
+    let minClearance = Infinity;
+    
+    for (let i = 1; i < samples; i++) {
+      const t = i / samples;
+      const samplePoint = new THREE.Vector3().addVectors(
+        start,
+        direction.clone().multiplyScalar(distance * t)
+      );
+      
+      // Check clearance at this point
+      const clearance = this.checkPointClearance(samplePoint);
+      minClearance = Math.min(minClearance, clearance);
+    }
+    
+    return minClearance;
   }
 
   handlePatrol(): void {
@@ -501,16 +642,18 @@ export class EnemyTank extends Tank {
     }
   }
 
-  // Check if the tank is stuck by comparing current position with last recorded position
+  // Enhanced method to check if the tank is stuck by comparing current position with last recorded position
   private checkIfStuck(): boolean {
     const currentPos = this.mesh.position;
     const distanceMoved = currentPos.distanceTo(this.lastPosition);
     
     // If we've barely moved since last check, we might be stuck
-    return distanceMoved < 0.5;
+    // Also check if we're trying to move - a stationary tank shouldn't be considered stuck
+    const isMoving = this.body.linvel().x !== 0 || this.body.linvel().z !== 0;
+    return isMoving && distanceMoved < 0.5;
   }
   
-  // Find a new direction to avoid obstacles - improved version
+  // Enhanced method to find the best direction to avoid obstacles
   private findAvoidanceDirection(): THREE.Vector3 {
     const currentForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
     const tankPosition = this.mesh.position;
@@ -526,8 +669,9 @@ export class EnemyTank extends Tank {
     // If we have a target, try to find a way around obstacles toward it
     if (targetPosition) {
       // Cast rays at various angles to find the clearest path
-      const angleIncrement = Math.PI / 8; // 22.5 degrees between rays
-      const maxAngle = Math.PI; // Check a full 180 degrees
+      // Use finer-grained angle increments for more accurate path finding
+      const angleIncrement = Math.PI / 16; // 11.25 degrees between rays for finer detection
+      const maxAngle = Math.PI * 1.5; // Check a wider 270 degrees to consider more options
       
       // Track best direction and its score
       let bestDirection = null;
@@ -548,8 +692,22 @@ export class EnemyTank extends Tank {
         
         // Score this direction based on distance and alignment with target direction
         // Prefer directions with more clearance and generally toward the target
+        // Increased weight on distance to prioritize open paths
         const alignmentFactor = 1 - (angleToTarget / Math.PI); // 1 = perfect alignment, 0 = opposite direction
-        const score = distance * (0.5 + 0.5 * alignmentFactor); // Balance between clearance and direction
+        
+        // Calculate base score with higher emphasis on distance
+        let score = distance * (0.7 + 0.3 * alignmentFactor);
+        
+        // Bonus for directions that are very open (have clear paths)
+        if (distance > 15) {
+          score *= 1.5;
+        }
+        
+        // Slight penalty for directions that are completely opposite to target
+        // to prevent ping-ponging behavior
+        if (angleToTarget > Math.PI * 0.75) {
+          score *= 0.8;
+        }
         
         // Update best direction if this one is better
         if (score > bestScore) {
@@ -564,16 +722,22 @@ export class EnemyTank extends Tank {
       }
     }
     
-    // Fallback to the original method if target-based approach didn't work
+    // Fallback with improved variation and more options
     // Try several directions and use raycasting to find a clear path
     const directions = [
-      new THREE.Euler(0, Math.PI/4, 0),    // 45° right
-      new THREE.Euler(0, -Math.PI/4, 0),   // 45° left
-      new THREE.Euler(0, Math.PI/2, 0),    // 90° right
-      new THREE.Euler(0, -Math.PI/2, 0),   // 90° left
-      new THREE.Euler(0, 3*Math.PI/4, 0),  // 135° right
-      new THREE.Euler(0, -3*Math.PI/4, 0), // 135° left
-      new THREE.Euler(0, Math.PI, 0)       // 180° (turn around)
+      new THREE.Euler(0, Math.PI/8, 0),     // 22.5° right
+      new THREE.Euler(0, -Math.PI/8, 0),    // 22.5° left
+      new THREE.Euler(0, Math.PI/4, 0),     // 45° right
+      new THREE.Euler(0, -Math.PI/4, 0),    // 45° left
+      new THREE.Euler(0, Math.PI/3, 0),     // 60° right
+      new THREE.Euler(0, -Math.PI/3, 0),    // 60° left
+      new THREE.Euler(0, Math.PI/2, 0),     // 90° right
+      new THREE.Euler(0, -Math.PI/2, 0),    // 90° left
+      new THREE.Euler(0, 2*Math.PI/3, 0),   // 120° right
+      new THREE.Euler(0, -2*Math.PI/3, 0),  // 120° left
+      new THREE.Euler(0, 3*Math.PI/4, 0),   // 135° right
+      new THREE.Euler(0, -3*Math.PI/4, 0),  // 135° left
+      new THREE.Euler(0, Math.PI, 0)        // 180° (turn around)
     ];
     
     // Shuffle directions for randomness
@@ -582,92 +746,230 @@ export class EnemyTank extends Tank {
       [directions[i], directions[j]] = [directions[j], directions[i]];
     }
     
-    // Find the first direction that doesn't have an obstacle
+    // Track the best direction based on distance to obstacle
+    let bestDirection = null;
+    let maxDistance = 0;
+    
+    // Find the direction with the greatest clearance
     for (const direction of directions) {
       const testDirection = currentForward.clone().applyEuler(direction);
       
-      // Check if there's an obstacle in this direction
-      if (!this.hasObstacleInDirection(testDirection, 8)) {
-        return testDirection;
+      // Get distance to obstacle in this direction
+      const distance = this.getDistanceToObstacle(testDirection);
+      
+      // If this is the clearest path so far, remember it
+      if (distance > maxDistance) {
+        maxDistance = distance;
+        bestDirection = testDirection;
+        
+        // If we found a very clear path, use it immediately
+        if (distance > 15) {
+          return testDirection;
+        }
       }
     }
     
-    // If all directions have obstacles, pick a random one
-    const randomIndex = Math.floor(Math.random() * directions.length);
-    return currentForward.clone().applyEuler(directions[randomIndex]);
+    // Return the best direction we found, or random if all are blocked
+    if (bestDirection && maxDistance > 2) {
+      return bestDirection;
+    } else {
+      // Complete blockage - choose a random direction as last resort
+      const randomIndex = Math.floor(Math.random() * directions.length);
+      return currentForward.clone().applyEuler(directions[randomIndex]);
+    }
   }
   
-  // Helper method to get distance to nearest obstacle in a direction
+  // Enhanced method to get distance to nearest obstacle in a direction
   private getDistanceToObstacle(direction: THREE.Vector3): number {
+    // Start position for rays is slightly above tank center to avoid hitting self
     const tankPosition = this.mesh.position.clone().add(new THREE.Vector3(0, 0.8, 0));
-    const maxDistance = 20; // Maximum distance to check
+    const maxDistance = 25; // Increased max distance check to see further ahead
     
-    // Check voxels first
-    const voxelResult = this.state.voxelWorld.raycast(
-      tankPosition, 
-      direction,
-      maxDistance
-    );
+    // Create a "cone" of rays to better detect obstacles near the path
+    // Main ray in center plus additional rays spread out by small angles
+    const rays = [
+      { direction: direction.clone(), weight: 1.0 },  // Center ray with full weight
+    ];
     
-    let voxelDistance = maxDistance;
-    if (voxelResult.voxel !== null) {
-      // Calculate distance to hit point
-      voxelDistance = tankPosition.distanceTo(voxelResult.position);
+    // Add rays with slight offsets to detect obstacles that might be just off-center
+    // This helps prevent the tank from grazing the corners of obstacles
+    const spreadAngle = Math.PI / 24; // 7.5 degree spread
+    
+    // Create 4 additional rays at slight angles from the main direction
+    for (let i = 0; i < 4; i++) {
+      // Alternate between left/right and increasing angles
+      const angle = ((i % 2) === 0 ? 1 : -1) * spreadAngle * (Math.floor(i/2) + 1);
+      const euler = new THREE.Euler(0, angle, 0);
+      const offsetDir = direction.clone().applyEuler(euler).normalize();
+      
+      // Add ray with reduced weight based on how far from center it is
+      rays.push({
+        direction: offsetDir,
+        weight: 0.7 - (Math.floor(i/2) * 0.2) // Weight decreases with angle
+      });
     }
     
-    // Then check terrain objects
-    const ray = new THREE.Raycaster(
-      tankPosition,
-      direction,
-      0,
-      maxDistance
-    );
+    // Track minimum weighted distance across all rays
+    let minWeightedDistance = maxDistance;
     
-    // Get terrain objects for collision check
-    const obstacles = this.state.terrain.filter(obj =>
-      obj !== this.state.terrain[this.state.terrain.length - 1] && // Exclude ground
-      obj.mesh instanceof THREE.Mesh
-    );
-    
-    const obstacleMeshes = obstacles.map(obj => obj.mesh);
-    const hits = ray.intersectObjects(obstacleMeshes, false);
-    
-    let obstacleDistance = maxDistance;
-    if (hits.length > 0) {
-      obstacleDistance = hits[0].distance;
+    // Process each ray to find obstacles
+    for (const ray of rays) {
+      let rayDistance = maxDistance;
+      
+      // Check voxels first
+      const voxelResult = this.state.voxelWorld.raycast(
+        tankPosition, 
+        ray.direction,
+        maxDistance
+      );
+      
+      if (voxelResult.voxel !== null) {
+        const pos = voxelToWorld(voxelResult.voxel);
+        // Calculate distance to hit point
+        rayDistance = Math.min(rayDistance, tankPosition.distanceTo(pos));
+      }
+      
+      // Then check terrain objects
+      const raycaster = new THREE.Raycaster(
+        tankPosition,
+        ray.direction,
+        0,
+        maxDistance
+      );
+      
+      // Get terrain objects for collision check
+      const obstacles = this.state.terrain.filter(obj =>
+        obj !== this.state.terrain[this.state.terrain.length - 1] && // Exclude ground
+        obj.mesh instanceof THREE.Mesh
+      );
+      
+      // Also check enemy tanks to avoid collisions with other tanks
+      const otherTanks = this.state.enemies.filter(tank => tank !== this);
+      const tankMeshes = otherTanks.map(tank => tank.mesh);
+      
+      // Combine all obstacle meshes
+      const obstacleMeshes = [...obstacles.map(obj => obj.mesh), ...tankMeshes];
+      
+      // Perform raycast against all obstacles
+      const hits = raycaster.intersectObjects(obstacleMeshes, false);
+      
+      if (hits.length > 0) {
+        rayDistance = Math.min(rayDistance, hits[0].distance);
+      }
+      
+      // Apply weight and track minimum weighted distance
+      const weightedDistance = rayDistance * ray.weight;
+      if (weightedDistance < minWeightedDistance) {
+        minWeightedDistance = weightedDistance;
+      }
     }
     
-    // Return the minimum distance (either to voxel or terrain)
-    return Math.min(voxelDistance, obstacleDistance);
+    // Return the minimum weighted distance across all rays
+    // Adjust for weights to normalize the result
+    return minWeightedDistance / 0.7; // Normalize by the minimum weight
   }
   
-  // Handle avoidance movement
+  // Enhanced method to handle obstacle avoidance movement
   private handleAvoidance(): void {
-    // If no avoidance direction is set or timer expired, find a new one
-    if (!this.avoidanceDirection || Date.now() > this.avoidanceTimer) {
-      this.avoidanceDirection = this.findAvoidanceDirection();
-      this.avoidanceTimer = Date.now() + this.obstacleAvoidanceTime;
+    const currentTime = Date.now();
+    
+    // If still stuck for too long, try more drastic measures
+    if (this.isStuck && (currentTime - this.lastStuckCheck > this.stuckDetectionTime * 2)) {
+      // Attempt the recovery maneuver (back up and turn)
+      this.attemptRecoveryManeuver();
+      return;
     }
     
-    // Move in the avoidance direction
+    // If no avoidance direction is set, find a new one
+    if (!this.avoidanceDirection) {
+      this.avoidanceDirection = this.findAvoidanceDirection();
+      this.avoidanceTimer = currentTime + this.obstacleAvoidanceTime;
+    }
+    // If timer expired, check if we need a new direction
+    else if (currentTime > this.avoidanceTimer) {
+      // Check if we're still making progress
+      if (this.isStuck) {
+        // We're still stuck - try a different direction
+        this.avoidanceDirection = this.findAvoidanceDirection();
+        // Extend avoidance time to give more time for this new direction
+        this.avoidanceTimer = currentTime + this.obstacleAvoidanceTime;
+      } else {
+        // We're making progress, consider ending avoidance if path is clear
+        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+        const clearPath = this.getDistanceToObstacle(forward) > 10;
+        
+        // If path ahead is clear, we can exit avoidance mode
+        if (clearPath) {
+          this.isStuck = false;
+          this.avoidanceDirection = null;
+          return;
+        } else {
+          // Path still not clear, continue with current direction
+          this.avoidanceTimer = currentTime + this.obstacleAvoidanceTime / 2;
+        }
+      }
+    }
+    
+    // Make sure we have a valid avoidance direction
+    if (!this.avoidanceDirection) {
+      this.avoidanceDirection = this.findAvoidanceDirection();
+      this.avoidanceTimer = currentTime + this.obstacleAvoidanceTime;
+    }
+    
+    // Get current forward direction
     const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+    
+    // Calculate turn direction to reach avoidance direction
     const turnDirection = this.calculateTurnDirection(forward, this.avoidanceDirection);
     
     // Calculate angle to the avoidance direction
     const angleToTarget = forward.angleTo(this.avoidanceDirection);
     
-    if (Math.abs(angleToTarget) > 0.1) {
-      // Turn toward the avoidance direction
-      this.turn(turnDirection);
+    // Adaptive movement based on angle to target and distance to obstacles
+    if (Math.abs(angleToTarget) > 0.2) {
+      // Sharper turn needed - turn faster with reduced forward motion
+      this.turn(turnDirection * 1.5); // Increased turn force for faster rotation
       
-      // Move forward slowly while turning
+      // Only move forward if somewhat facing the target direction and path is clear
       if (angleToTarget < Math.PI / 2) {
-        this.move(0.3);
+        // Check if there's an obstacle directly ahead
+        const forwardDistance = this.getDistanceToObstacle(forward);
+        
+        if (forwardDistance > 2.0) {
+          // Path is clear enough to move slowly while turning
+          this.move(0.2);
+        } else if (forwardDistance < 1.0) {
+          // Too close to an obstacle, back up slightly
+          this.move(-0.3);
+        }
       }
     } else {
-      // We're facing the avoidance direction, move forward
-      this.move(1.0);
+      // Mostly aligned with target direction
+      
+      // Check if clear path ahead
+      const forwardDistance = this.getDistanceToObstacle(forward);
+      
+      if (forwardDistance > 5.0) {
+        // Clear path, move at full speed
+        this.move(1.0);
+        
+        // Small course corrections if not perfectly aligned
+        if (angleToTarget > 0.05) {
+          this.turn(turnDirection * 0.7);
+        }
+      } else if (forwardDistance > 2.0) {
+        // Obstacle ahead but not immediate, slow down and turn more aggressively
+        this.move(0.5);
+        this.turn(turnDirection * 1.2);
+      } else {
+        // Very close to obstacle, almost stop and turn sharply
+        this.move(0.1);
+        this.turn(turnDirection * 2.0);
+      }
     }
+    
+    // Ensure the physics body responds to our commands
+    this.body.wakeUp();
   }
 
   // Check if we're making progress toward the target
@@ -683,9 +985,28 @@ export class EnemyTank extends Tank {
     return currentDistance < prevDistance;
   }
   
-  // Check if we're persistently stuck
+  // Enhanced persistent stuck detection with better tracking
   private isPersistentlyStuck(): boolean {
-    return this.isStuck && Date.now() - this.lastStuckCheck > this.stuckDetectionTime * 3;
+    // Basic stuck check - been stuck for a long time
+    const basicCheck = this.isStuck && Date.now() - this.lastStuckCheck > this.stuckDetectionTime * 2;
+    
+    // Check physics velocity - if we're applying force but barely moving, we're likely stuck
+    const velocity = this.body.linvel();
+    const speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+    const isAttemptingToMove = Math.abs(velocity.x) > 0.1 || Math.abs(velocity.z) > 0.1;
+    const lowSpeed = speed < 2.0;
+    
+    // Get current forward direction
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+    
+    // Check if we have an obstacle directly in front or behind
+    const forwardObstacle = this.hasObstacleInDirection(forward, 2);
+    const backwardObstacle = this.hasObstacleInDirection(forward.clone().multiplyScalar(-1), 2);
+    
+    // We're persistently stuck if:
+    // 1. We've been marked as stuck for a while, OR
+    // 2. We're trying to move but have very low speed and obstacles on multiple sides
+    return basicCheck || (isAttemptingToMove && lowSpeed && forwardObstacle && backwardObstacle);
   }
   
   // Generate a path with waypoints to navigate around obstacles
@@ -777,19 +1098,73 @@ export class EnemyTank extends Tank {
     return hits.length > 0;
   }
 
-  // Attempt a recovery maneuver when stuck for a long time
+  // Enhanced recovery maneuver for when the tank is persistently stuck
   private attemptRecoveryManeuver(): void {
-    // Reverse direction for a moment to get unstuck
+    const currentTime = Date.now();
+    
+    // Get the current forward direction
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+    
+    // First, back up more aggressively to escape the obstacle
     this.move(-1.0);
     
-    // Apply a random rotation to try to break free
-    const randomTurn = Math.random() > 0.5 ? 1 : -1;
-    this.turn(randomTurn * 2);
+    // Calculate optimal turn direction based on obstacle positions
+    // Try to turn away from nearby obstacles
+    let optimalTurnDirection = 0;
     
-    // Reset avoidance direction to force finding a new path
+    // Check left and right to see which side has more clearance
+    const leftDir = forward.clone().applyEuler(new THREE.Euler(0, Math.PI/4, 0));
+    const rightDir = forward.clone().applyEuler(new THREE.Euler(0, -Math.PI/4, 0));
+    
+    const leftDistance = this.getDistanceToObstacle(leftDir);
+    const rightDistance = this.getDistanceToObstacle(rightDir);
+    
+    // Turn toward the direction with more space
+    if (leftDistance > rightDistance) {
+      optimalTurnDirection = 1; // Turn left (positive direction)
+    } else {
+      optimalTurnDirection = -1; // Turn right (negative direction)
+    }
+    
+    // Apply a stronger turn impulse to break free
+    this.turn(optimalTurnDirection * 3);
+    
+    // Increase tank physics wake-up
+    this.body.wakeUp();
+    
+    // Increase the linear damping temporarily to prevent bouncing/sliding
+    const currentDamping = this.body.linDamping();
+    this.body.setLinDamping(currentDamping * 2);
+    
+    // Apply a sudden impulse to "kick" the tank free if it's truly stuck
+    const kickDirection = new THREE.Vector3(
+      (Math.random() - 0.5) * 2, // Random X direction
+      0,
+      (Math.random() - 0.5) * 2  // Random Z direction
+    ).normalize();
+    
+    // Apply the impulse to the physics body
+    this.body.applyImpulse(
+      { 
+        x: kickDirection.x * this.speed * 1.5, 
+        y: 0.1, // Small upward component can help clear low obstacles
+        z: kickDirection.z * this.speed * 1.5
+      },
+      true
+    );
+    
+    // Reset the avoidance state completely
     this.avoidanceDirection = null;
+    this.avoidanceTimer = currentTime + this.obstacleAvoidanceTime * 1.5; // Extended time
     
-    // Extend the avoidance timer
-    this.avoidanceTimer = Date.now() + this.obstacleAvoidanceTime;
+    // Generate a completely new patrol target if we were patrolling
+    if (!this.trackingPlayer && this.targetPosition) {
+      this.targetPosition = null; // Will force generating a new patrol point
+    }
+    
+    // Schedule restoring normal linear damping
+    setTimeout(() => {
+      this.body.setLinDamping(currentDamping);
+    }, 500);
   }
 }
