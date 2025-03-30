@@ -32,6 +32,7 @@ export class Powerup implements GameObject {
   initialY: number;
   spawnTime: number;
   lifetime: number = 30000; // 30 seconds lifetime
+  wasCollected: boolean = false;
   
   constructor(
     playState: PlayState,
@@ -145,7 +146,7 @@ export class Powerup implements GameObject {
     if (other instanceof PlayerTank) {
       // Mark this powerup as collected by player (not just timed out)
       if (this.body.userData) {
-        this.body.userData.wasCollected = true;
+        this.wasCollected = true;
       }
       
       this.applyEffect(other);

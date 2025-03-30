@@ -52,9 +52,6 @@ export class PlayState implements IGameState {
   powerups : Powerup[] = [];
   activeEffects : PowerupEffect[] = [];
 
-  // Add a property to track visible enemies for radar
-  private previousEnemyCount: number = 0;
-
   public voxelWorld: VoxelWorld; // New property for voxel world
 
   // Physics debug visualization properties
@@ -424,8 +421,6 @@ export class PlayState implements IGameState {
 
     // Update radar and play ping sound only when new enemies appear
     this.radar.update(this.player, this.enemies, this.powerups);
-
-    this.previousEnemyCount = this.enemies.length;
 
     // Check for level completion
     if (!this.levelComplete && this.enemies.length === 0) {
@@ -1590,8 +1585,7 @@ export class PlayState implements IGameState {
       
       // When a powerup is used (collected by player), decrease remaining count
       if (powerup.body && powerup.body.userData) {
-        const collisionData = powerup.body.userData;
-        if (collisionData.wasCollected) {
+        if (powerup.wasCollected) {
           // Only decrease counter if it was collected by player (not timed out)
           this.powerupsRemainingInLevel--;
           
@@ -1688,6 +1682,9 @@ export class PlayState implements IGameState {
       effectItem.style.display = 'flex';
       effectItem.style.alignItems = 'center';
       effectItem.style.marginBottom = '5px';
+      effectItem.classList.add('powerup-effect-item');
+      effectItem.dataset.type = effect.type;
+      effectItem.dataset.endTime = effect.endTime.toString();
 
       // Create icon/color indicator
       const icon = document.createElement('div');
@@ -1698,6 +1695,7 @@ export class PlayState implements IGameState {
 
       // Create label with time remaining
       const label = document.createElement('div');
+      label.classList.add('powerup-timer');
       label.style.color = '#ffffff';
       label.style.fontFamily = 'monospace';
       label.style.fontSize = '14px';
@@ -1721,6 +1719,62 @@ export class PlayState implements IGameState {
     });
 
     document.body.appendChild(statusContainer);
+    
+    // Start the timer update interval if it's not already running
+    if (!this._powerupTimerInterval) {
+      this._powerupTimerInterval = setInterval(() => {
+        this.updatePowerupTimers();
+      }, 1000); // Update every second
+    }
+  }
+  
+  // Add a property to track the timer interval
+  private _powerupTimerInterval: number | null = null;
+  
+  // Update just the timers in the powerup display without recreating the whole display
+  private updatePowerupTimers(): void {
+    const powerupStatus = document.getElementById('powerup-status');
+    if (!powerupStatus) {
+      // Clear the interval if the display doesn't exist anymore
+      if (this._powerupTimerInterval) {
+        clearInterval(this._powerupTimerInterval);
+        this._powerupTimerInterval = null;
+      }
+      return;
+    }
+    
+    const timerElements = powerupStatus.querySelectorAll('.powerup-effect-item');
+    
+    // If no timer elements, clear the interval
+    if (timerElements.length === 0) {
+      if (this._powerupTimerInterval) {
+        clearInterval(this._powerupTimerInterval);
+        this._powerupTimerInterval = null;
+      }
+      return;
+    }
+    
+    timerElements.forEach(item => {
+      // Get the end time from the data attribute
+      const endTime = parseInt(item.getAttribute('data-endTime') || '0', 10);
+      const type = item.getAttribute('data-type');
+      
+      // Calculate time remaining
+      const timeRemaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+      
+      // Update the timer text
+      const timerLabel = item.querySelector('.powerup-timer');
+      if (timerLabel) {
+        switch (type) {
+          case PowerupType.SPEED:
+            timerLabel.textContent = `Speed Boost: ${timeRemaining}s`;
+            break;
+          case PowerupType.ROTATION:
+            timerLabel.textContent = `Rotation Boost: ${timeRemaining}s`;
+            break;
+        }
+      }
+    });
   }
 
   // Show a notification when a powerup is collected
