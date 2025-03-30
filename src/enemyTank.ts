@@ -1133,8 +1133,8 @@ export class EnemyTank extends Tank {
     this.body.wakeUp();
     
     // Increase the linear damping temporarily to prevent bouncing/sliding
-    const currentDamping = this.body.linDamping();
-    this.body.setLinDamping(currentDamping * 2);
+    const currentDamping = this.body.linearDamping();
+    this.body.setLinearDamping(currentDamping * 2);
     
     // Apply a sudden impulse to "kick" the tank free if it's truly stuck
     const kickDirection = new THREE.Vector3(
