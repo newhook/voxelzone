@@ -11,6 +11,7 @@ import { GameConfig, defaultConfig } from './config';
 import { VoxelWorld } from './voxelWorld';
 import { createVoxelStructures } from './arena';
 import { createTerrain, createGround, createBoundaryWalls } from './gameObjects';
+import { Powerup, PowerupType, PowerupEffect } from './powerup';
 
 export class PlayState implements IGameState {
   public gameStateManager: GameStateManager;
@@ -409,6 +410,16 @@ export class PlayState implements IGameState {
       this.levelComplete = true;
       this.showLevelComplete();
     }
+
+    // Handle powerup spawning
+    this.powerupSpawnTimer += deltaTime * 1000; // Convert to milliseconds
+    if (this.powerupSpawnTimer >= this.powerupSpawnInterval) {
+      this.powerupSpawnTimer = 0;
+      this.spawnPowerup();
+    }
+
+    // Update active powerup effects
+    this.updatePowerupEffects(deltaTime);
   }
 
   private toggleWireframeMode(scene: THREE.Scene, isWireframe: boolean) {
@@ -1439,5 +1450,326 @@ export class PlayState implements IGameState {
         document.body.removeChild(debugNotification);
       }, 500);
     }, 2000);
+  }
+
+  // Spawn a powerup at a random valid location
+  private spawnPowerup(): void {
+    // Only spawn if we have space for more powerups
+    if (this.powerups.length >= this.maxPowerupsOnMap) {
+      return;
+    }
+
+    // Try to find a valid spawn position
+    const halfWorldSize = this.config.worldSize / 2 - 20;
+    let position: THREE.Vector3;
+    let attempts = 0;
+    const maxAttempts = 100; // Prevent infinite loops
+
+    do {
+      let x = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
+      let z = (Math.random() * (halfWorldSize * 2)) - halfWorldSize;
+      position = new THREE.Vector3(x, 1.2, z); // Slightly raised for better visibility
+      attempts++;
+
+      // Break the loop if we've tried too many times to avoid freezing the game
+      if (attempts >= maxAttempts) {
+        console.warn(`Could not find valid spawn position for powerup after ${maxAttempts} attempts`);
+        return;
+      }
+    } while (!this.isValidSpawnPosition(position));
+
+    // Choose a random powerup type
+    const powerupTypes = [
+      PowerupType.HEALTH,
+      PowerupType.AMMO,
+      PowerupType.SPEED,
+      PowerupType.ROTATION
+    ];
+    const randomType = powerupTypes[Math.floor(Math.random() * powerupTypes.length)];
+    
+    // Create powerup at the position
+    const powerup = new Powerup(this, position, randomType);
+    this.powerups.push(powerup);
+    this.scene.add(powerup.mesh);
+    this.physicsWorld.addBody(powerup);
+    
+    // Create a brief glow effect to highlight the new powerup
+    this.createPowerupSpawnEffect(position, randomType);
+  }
+  
+  // Create a visual effect when a powerup spawns
+  private createPowerupSpawnEffect(position: THREE.Vector3, type: PowerupType): void {
+    // Add a pulse of light
+    const color = this.getPowerupColor(type);
+    const light = new THREE.PointLight(color, 5, 15);
+    light.position.copy(position);
+    this.scene.add(light);
+    
+    // Fade out the light
+    const startTime = Date.now();
+    const duration = 1000; // 1 second
+    
+    const animateLight = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / duration;
+      
+      if (progress >= 1) {
+        this.scene.remove(light);
+        return;
+      }
+      
+      // Pulse the intensity
+      light.intensity = 5 * (1 - progress);
+      
+      requestAnimationFrame(animateLight);
+    };
+    
+    animateLight();
+  }
+  
+  // Get color for a powerup type
+  private getPowerupColor(type: PowerupType): number {
+    switch (type) {
+      case PowerupType.HEALTH:
+        return 0xff0000; // Red for health
+      case PowerupType.AMMO:
+        return 0xffaa00; // Orange for ammo
+      case PowerupType.SPEED:
+        return 0x00ffff; // Cyan for speed
+      case PowerupType.ROTATION:
+        return 0xffff00; // Yellow for rotation
+      default:
+        return 0xffffff; // White default
+    }
+  }
+  
+  // Remove a powerup from the game
+  public removePowerup(powerup: Powerup): void {
+    const index = this.powerups.indexOf(powerup as unknown as GameObject);
+    if (index !== -1) {
+      this.powerups.splice(index, 1);
+    }
+  }
+  
+  // Add a powerup effect to the active effects list
+  public addPowerupEffect(effect: PowerupEffect): void {
+    // Check if we already have an effect of this type
+    const existingEffectIndex = this.activeEffects.findIndex(e => e.type === effect.type);
+    
+    if (existingEffectIndex !== -1) {
+      // Replace the existing effect with the new one
+      const existingEffect = this.activeEffects[existingEffectIndex];
+      
+      // Call the revert function of the existing effect before removing it
+      if (existingEffect.revertFunction) {
+        existingEffect.revertFunction();
+      }
+      
+      this.activeEffects[existingEffectIndex] = effect;
+    } else {
+      // Add as a new effect
+      this.activeEffects.push(effect);
+    }
+    
+    // Update the powerup status display
+    this.updatePowerupStatusDisplay();
+  }
+  
+  // Update the powerup effects
+  private updatePowerupEffects(deltaTime: number): void {
+    const currentTime = Date.now();
+    
+    for (let i = this.activeEffects.length - 1; i >= 0; i--) {
+      const effect = this.activeEffects[i];
+      
+      // Check if the effect has expired
+      if (currentTime >= effect.endTime) {
+        // Call the revert function if it exists
+        if (effect.revertFunction) {
+          effect.revertFunction();
+        }
+        
+        // Remove the effect
+        this.activeEffects.splice(i, 1);
+        
+        // Update the display
+        this.updatePowerupStatusDisplay();
+      }
+    }
+  }
+  
+  // Update the UI to show active powerup effects
+  private updatePowerupStatusDisplay(): void {
+    // Remove any existing powerup status display
+    const existingDisplay = document.getElementById('powerup-status');
+    if (existingDisplay) {
+      existingDisplay.remove();
+    }
+    
+    // If there are no active effects, we don't need to create a display
+    if (this.activeEffects.length === 0) {
+      return;
+    }
+    
+    // Create a container for the powerup status
+    const statusContainer = document.createElement('div');
+    statusContainer.id = 'powerup-status';
+    statusContainer.style.position = 'absolute';
+    statusContainer.style.bottom = '20px';
+    statusContainer.style.right = '20px';
+    statusContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    statusContainer.style.padding = '10px';
+    statusContainer.style.borderRadius = '5px';
+    
+    // Create a header for the container
+    const header = document.createElement('div');
+    header.textContent = 'ACTIVE POWERUPS';
+    header.style.color = '#ffffff';
+    header.style.fontFamily = 'monospace';
+    header.style.fontSize = '16px';
+    header.style.marginBottom = '5px';
+    header.style.textAlign = 'center';
+    statusContainer.appendChild(header);
+    
+    // Add each active effect to the display
+    this.activeEffects.forEach(effect => {
+      const effectItem = document.createElement('div');
+      effectItem.style.display = 'flex';
+      effectItem.style.alignItems = 'center';
+      effectItem.style.marginBottom = '5px';
+      
+      // Create icon/color indicator
+      const icon = document.createElement('div');
+      icon.style.width = '12px';
+      icon.style.height = '12px';
+      icon.style.backgroundColor = `#${this.getPowerupColor(effect.type).toString(16).padStart(6, '0')}`;
+      icon.style.marginRight = '8px';
+      
+      // Create label with time remaining
+      const label = document.createElement('div');
+      label.style.color = '#ffffff';
+      label.style.fontFamily = 'monospace';
+      label.style.fontSize = '14px';
+      
+      // Calculate time remaining
+      const timeRemaining = Math.max(0, Math.floor((effect.endTime - Date.now()) / 1000));
+      
+      // Set the appropriate text based on powerup type
+      switch (effect.type) {
+        case PowerupType.SPEED:
+          label.textContent = `Speed Boost: ${timeRemaining}s`;
+          break;
+        case PowerupType.ROTATION:
+          label.textContent = `Rotation Boost: ${timeRemaining}s`;
+          break;
+      }
+      
+      effectItem.appendChild(icon);
+      effectItem.appendChild(label);
+      statusContainer.appendChild(effectItem);
+    });
+    
+    document.body.appendChild(statusContainer);
+  }
+  
+  // Show a notification when a powerup is collected
+  public showPowerupNotification(message: string, color: number): void {
+    const notification = document.createElement('div');
+    notification.style.position = 'absolute';
+    notification.style.top = '30%';
+    notification.style.left = '50%';
+    notification.style.transform = 'translate(-50%, -50%)';
+    notification.style.color = `#${color.toString(16).padStart(6, '0')}`;
+    notification.style.fontFamily = 'monospace';
+    notification.style.fontSize = '24px';
+    notification.style.padding = '10px';
+    notification.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    notification.style.border = `2px solid #${color.toString(16).padStart(6, '0')}`;
+    notification.style.borderRadius = '5px';
+    notification.style.textAlign = 'center';
+    notification.style.zIndex = '1000';
+    notification.style.opacity = '1';
+    notification.style.transition = 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out';
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    // Animate the notification moving up and fading out
+    setTimeout(() => {
+      notification.style.opacity = '0';
+      notification.style.transform = 'translate(-50%, -70%)';
+      
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 500);
+    }, 2000);
+  }
+  
+  // Check if a spawn position is valid (not inside obstacles, other tanks, etc.)
+  private isValidSpawnPosition(position: THREE.Vector3): boolean {
+    // Check distance from player
+    const minPlayerDistance = 15;
+    if (this.player.mesh.position.distanceTo(position) < minPlayerDistance) {
+      return false;
+    }
+    
+    // Check distance from enemies
+    const minEnemyDistance = 10;
+    for (const enemy of this.enemies) {
+      if (enemy.mesh.position.distanceTo(position) < minEnemyDistance) {
+        return false;
+      }
+    }
+    
+    // Check if position is inside any terrain objects
+    for (const terrainObj of this.terrain) {
+      // Skip ground
+      if (terrainObj === this.terrain[this.terrain.length - 1]) {
+        continue;
+      }
+      
+      if (terrainObj.mesh && terrainObj.mesh.geometry) {
+        // Get the size of the terrain object
+        const meshSize = new THREE.Vector3();
+        const boundingBox = new THREE.Box3().setFromObject(terrainObj.mesh);
+        boundingBox.getSize(meshSize);
+        
+        // Get the distance from the center of the terrain object
+        const distance = terrainObj.mesh.position.distanceTo(position);
+        
+        // If the distance is less than the approximate radius, it's too close
+        const approxRadius = Math.max(meshSize.x, meshSize.z) / 2;
+        if (distance < approxRadius + 2) { // Add a small buffer
+          return false;
+        }
+      }
+    }
+    
+    // Check for voxels at the position
+    const voxelResult = this.voxelWorld.raycast(
+      new THREE.Vector3(position.x, position.y + 5, position.z),
+      new THREE.Vector3(0, -1, 0),
+      10
+    );
+    
+    if (voxelResult.voxel !== null) {
+      // If there's a voxel within 2 units above the spawn point, it's invalid
+      if (voxelResult.distance < 2) {
+        return false;
+      }
+    }
+    
+    // Check distance from other powerups
+    const minPowerupDistance = 10;
+    for (const powerup of this.powerups) {
+      if (powerup.mesh.position.distanceTo(position) < minPowerupDistance) {
+        return false;
+      }
+    }
+    
+    // If all checks pass, the position is valid
+    return true;
   }
 }
