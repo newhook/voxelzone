@@ -8,7 +8,6 @@ import { IGameState } from './gameStates';
 import { Radar } from './radar';
 import { GameStateManager } from './gameStateManager';
 import { GameConfig, defaultConfig } from './config';
-import { Projectile, ProjectileSource } from './projectile';
 import { VoxelWorld } from './voxelWorld';
 import { createVoxelStructures } from './arena';
 import { createTerrain, createGround, createBoundaryWalls } from './gameObjects';
@@ -506,7 +505,7 @@ export class PlayState implements IGameState {
     }
   }
 
-  public handleDebrisHit(index: number, enemyPos: { x: number, y: number, z: number }): void {
+  public handleDebrisHit(index: number, enemyPos: THREE.Vector3): void {
     const debris = this.debris[index];
     const soundManager = this.gameStateManager.initSoundManager();
     soundManager.playHit();
@@ -573,7 +572,7 @@ export class PlayState implements IGameState {
     this.projectiles.splice(index, 1);
   }
 
-  private createExplosion(position: { x: number, y: number, z: number }): void {
+  private createExplosion(position: THREE.Vector3): void {
     const particleCount = 30; // Increased from 20
 
     // Add an explosion flash light

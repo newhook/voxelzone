@@ -151,6 +151,7 @@ export class Projectile implements GameObject {
 
   // Handle collision with other physics objects
   private handleCollision(other: GameObject): void {
+    console.log("Projectile collision detected with:", other);
     // Prevent multiple collisions from being processed
     if (this.hasCollided) return;
     this.hasCollided = true;
@@ -174,7 +175,7 @@ export class Projectile implements GameObject {
     const voxelPos = worldToVoxel(projectileVector);
 
     // Destroy voxels in a radius around the collision point
-    this.destroyVoxelsInRadius(voxelPos, 1.5);
+    this.destroyVoxelsInRadius(voxelPos, 2);
 
     // Apply explosive force to nearby physics objects
     this.applyExplosiveForce(projectileVector, 10, 300);
@@ -189,7 +190,8 @@ export class Projectile implements GameObject {
       // Get the index of the enemy in the array
       const index = this.state.debris.indexOf(other);
       if (index !== -1) {
-        this.state.handleDebrisHit(index, this.body.translation);
+        const pos = this.body.translation();
+        this.state.handleDebrisHit(index, new THREE.Vector3(pos.x, pos.y, pos.z));
         this.destroy();
         return true;
       }
@@ -367,6 +369,7 @@ export class Projectile implements GameObject {
   }
 
   private destroyVoxelsInRadius(center: VoxelCoord, radius: number): void {
+    console.log("Destroying voxels in radius:", center, radius);
     for (let x = -Math.ceil(radius); x <= Math.ceil(radius); x++) {
       for (let y = -Math.ceil(radius); y <= Math.ceil(radius); y++) {
         for (let z = -Math.ceil(radius); z <= Math.ceil(radius); z++) {
@@ -381,9 +384,11 @@ export class Projectile implements GameObject {
           if (distance <= radius) {
             // Get the voxel at this position
             const voxel = this.state.voxelWorld.getVoxel(checkPos);
+              console.log("Voxel at checkPos:", checkPos, voxel);
 
             // Only destroy the voxel if it exists and is breakable
             if (voxel !== undefined && voxelProperties[voxel].breakable) {
+              console.log("Destroying voxel at:", checkPos);
               this.state.voxelWorld.setVoxel(checkPos, undefined);
             }
           }

@@ -92,14 +92,12 @@ export class PhysicsWorld implements PhysicsWorldType {
           if (gameObj1 && this.collisionHandlers.has(body1Handle)) {
             const collider = this.collisionHandlers.get(body1Handle)
             if (collider && gameObj2) {
-              // console.log("Collision detected between", gameObj1, "and", gameObj2);
               collider(gameObj2);
             }
           }
           if (gameObj2 && this.collisionHandlers.has(body2Handle)) {
             let collider = this.collisionHandlers.get(body2Handle)
             if (collider && gameObj1) {
-              // console.log("Collision detected between", gameObj1, "and", gameObj2);
               collider(gameObj1);
             }
           }

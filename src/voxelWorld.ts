@@ -20,6 +20,16 @@ import { GameConfig } from './config';
 // Chunk size (16x16x16 voxels per chunk, like Minecraft)
 const CHUNK_SIZE = 16;
 
+export interface PhysicsChunk {
+  minX: number;
+  minY: number;
+  minZ: number;
+  maxX: number;
+  maxY: number;
+  maxZ: number;
+  material: VoxelMaterial;
+}
+
 export interface Chunk {
   position: { x: number, y: number, z: number }; // Chunk position in chunk coordinates
   voxels: Map<string, VoxelMaterial>; // Map of voxel positions to materials
