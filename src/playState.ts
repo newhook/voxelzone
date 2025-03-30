@@ -527,7 +527,7 @@ export class PlayState implements IGameState {
     }
   }
 
-  public handleEnemyHit(enemyIndex: number, enemyPos: { x: number, y: number, z: number }): void {
+  public handleEnemyHit(enemyIndex: number, enemyPos: THREE.Vector3): void {
     const enemy = this.enemies[enemyIndex];
 
     const soundManager = this.gameStateManager.initSoundManager();

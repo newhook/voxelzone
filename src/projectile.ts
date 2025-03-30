@@ -207,10 +207,10 @@ export class Projectile implements GameObject {
       const enemyIndex = this.state.enemies.indexOf(other);
       if (enemyIndex !== -1) {
         // Get position for explosion effect
-        const enemyPos = other.body.translation();
+        const pos = other.body.translation();
 
         // Call the PlayState's handleEnemyHit method
-        this.state.handleEnemyHit(enemyIndex, enemyPos);
+        this.state.handleEnemyHit(enemyIndex, new THREE.Vector3(pos.x, pos.y, pos.z));
 
         // Destroy this projectile
         this.destroy();
@@ -369,7 +369,6 @@ export class Projectile implements GameObject {
   }
 
   private destroyVoxelsInRadius(center: VoxelCoord, radius: number): void {
-    console.log("Destroying voxels in radius:", center, radius);
     for (let x = -Math.ceil(radius); x <= Math.ceil(radius); x++) {
       for (let y = -Math.ceil(radius); y <= Math.ceil(radius); y++) {
         for (let z = -Math.ceil(radius); z <= Math.ceil(radius); z++) {
@@ -384,11 +383,9 @@ export class Projectile implements GameObject {
           if (distance <= radius) {
             // Get the voxel at this position
             const voxel = this.state.voxelWorld.getVoxel(checkPos);
-              console.log("Voxel at checkPos:", checkPos, voxel);
 
             // Only destroy the voxel if it exists and is breakable
             if (voxel !== undefined && voxelProperties[voxel].breakable) {
-              console.log("Destroying voxel at:", checkPos);
               this.state.voxelWorld.setVoxel(checkPos, undefined);
             }
           }
