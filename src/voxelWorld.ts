@@ -376,6 +376,7 @@ export class VoxelWorld {
 
   // Render a chunk
   renderChunk(chunk: Chunk): void {
+    console.log("Rendering chunk at", chunk.position);
     // Remove existing mesh children
     while (chunk.mesh.children.length > 0) {
       chunk.mesh.remove(chunk.mesh.children[0]);
