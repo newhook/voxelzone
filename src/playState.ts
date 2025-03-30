@@ -590,6 +590,9 @@ export class PlayState implements IGameState {
       // Add score points for a destroyed enemy
       this.score += 100;
       this.updateScoreDisplay();
+      
+      // Update the enemy counter when an enemy is destroyed
+      this.updateEnemyCounter();
     }
   }
 
@@ -913,6 +916,7 @@ export class PlayState implements IGameState {
     // Initialize health and ammo displays
     this.showHealthNotification();
     this.updateAmmoDisplay();
+    this.updateEnemyCounter(); // Initialize enemy counter display
 
     // Enable the input cooldown to prevent accidental firing on game start
     this.inputCooldownActive = true;
@@ -1827,5 +1831,37 @@ export class PlayState implements IGameState {
     ammoContainer.appendChild(ammoText);
 
     document.body.appendChild(ammoContainer);
+  }
+
+  // Update the UI to show progress toward level completion
+  private updateEnemyCounter(): void {
+    // Remove any existing enemy counter display
+    const existingDisplay = document.getElementById('enemy-counter');
+    if (existingDisplay) {
+      existingDisplay.remove();
+    }
+
+    // Create a container for the enemy counter
+    const counterContainer = document.createElement('div');
+    counterContainer.id = 'enemy-counter';
+    counterContainer.style.position = 'absolute';
+    counterContainer.style.top = '190px'; // Position below ammo display
+    counterContainer.style.right = '20px';
+    counterContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    counterContainer.style.padding = '10px';
+    counterContainer.style.borderRadius = '5px';
+    counterContainer.style.border = '1px solid #ff4444';
+    counterContainer.style.color = '#ff4444';
+    counterContainer.style.fontFamily = 'monospace';
+    counterContainer.style.fontSize = '16px';
+    counterContainer.style.width = '150px';
+    counterContainer.style.textAlign = 'center';
+
+    // Create the counter text
+    const counterText = document.createElement('div');
+    counterText.textContent = `TANKS: ${this.enemies.length}`;
+    counterContainer.appendChild(counterText);
+
+    document.body.appendChild(counterContainer);
   }
 }
