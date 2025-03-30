@@ -377,6 +377,30 @@ export class EnemyTank extends Tank {
   update(delta: number): void {
     super.update(delta);
 
+    // Fail-safe: Destroy tank if it falls below y=0 (out of the map)
+    if (this.mesh.position.y < 0) {
+      // Remove tank from game
+      if (this.mesh.parent) {
+        this.mesh.parent.remove(this.mesh);
+      }
+      
+      // Remove from physics world
+      if (this.body) {
+        this.state.physicsWorld.removeBody(this);
+      }
+      
+      // Find this tank's index in enemies array
+      const tankIndex = this.state.enemies.indexOf(this);
+      if (tankIndex !== -1) {
+        // Remove from array
+        this.state.enemies.splice(tankIndex, 1);
+        
+        // Update the enemy counter
+        this.state.updateEnemyCounter();
+      }
+      return;
+    }
+
     const currentTime = Date.now();
     const timeSinceLastUpdate = currentTime - this.lastAIUpdate;
     

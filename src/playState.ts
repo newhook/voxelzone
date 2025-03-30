@@ -1846,7 +1846,7 @@ export class PlayState implements IGameState {
   }
 
   // Update the UI to show progress toward level completion
-  private updateEnemyCounter(): void {
+  public updateEnemyCounter(): void {
     // Remove any existing enemy counter display
     const existingDisplay = document.getElementById('enemy-counter');
     if (existingDisplay) {
