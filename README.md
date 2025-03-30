@@ -1,20 +1,22 @@
 # Voxelzone
 
-A modern remake of the classic Atari Voxelzone arcade game, built with Three.js and TypeScript.
+A modern remake of the classic Atari tank combat game, built with Three.js, TypeScript, and Rapier physics.
 
-## Description
+![Voxelzone Game Screenshot](https://placeholder-for-screenshot.png)
 
-Voxelzone is a first-person tank combat game where players navigate a virtual battlefield, destroying enemy tanks while avoiding their attacks. This remake preserves the original's vector graphics aesthetic while adding modern rendering techniques and gameplay improvements.
+## Overview
+
+Voxelzone is a first-person tank combat game where players navigate through a diverse voxel battlefield, destroying enemy tanks while avoiding their attacks. The game features an immersive 3D environment with four distinct zones: forest, urban, desert, and mountain, each offering unique tactical challenges.
 
 ## Features
 
-- First-person tank combat gameplay
-- Vector-style graphics reminiscent of the original arcade classic
-- Enemy AI tanks
-- Radar system for tracking enemies
-- Physics-based projectiles
-- Multiple game states (marquee, gameplay)
-- Original sound effects and music
+- **Immersive 3D Voxel Environment**: Navigate through forests, urban landscapes, mountains, and deserts
+- **Advanced Enemy AI**: Tanks that patrol, chase, and strategically attack with obstacle avoidance
+- **Physics-Based Gameplay**: Realistic physics for tanks and projectiles using Rapier physics engine
+- **Dynamic Line-of-Sight**: Enemies can only detect you when they have line of sight
+- **Radar System**: Track enemy positions with the onboard radar
+- **Combat Effects**: Visual effects for projectiles, hits, and tank destruction
+- **Arcade Experience**: Complete with attract mode, game states, and classic sound effects
 
 ## Getting Started
 
@@ -55,22 +57,59 @@ yarn build
 
 The built files will be in the `dist` directory.
 
+## Controls
+
+- **W/S** - Move forward/backward
+- **A/D** - Turn tank left/right
+- **Mouse Movement** - Aim turret
+- **Left Mouse Button** - Fire
+- **Space** - Start game (on title screen)
+- **P** - Pause game
+- **ESC** - Return to title screen
+
+## Gameplay Tips
+
+- Use terrain and obstacles for cover from enemy fire
+- Enemy tanks are equipped with different accuracy levels and attack patterns
+- Listen for audio cues that indicate when an enemy has spotted you
+- Check your radar frequently to plan your approach
+- Use hit-and-run tactics against multiple enemies
+- Remember that enemies lose track of you if you break line of sight
+
+## Environment
+
+The game world is divided into four distinct quadrants:
+
+1. **Forest Zone**: Dense clusters of trees provide cover but limit visibility
+2. **Urban Zone**: Buildings and barriers create maze-like paths with strategic choke points
+3. **Desert Zone**: Open areas with scattered rock formations and cacti
+4. **Mountain Zone**: Elevated terrain with narrow passages and ambush points
+
 ## Project Structure
 
 - `src/main.ts` - Entry point for the application
 - `src/gameStates.ts` - Game state management system
 - `src/marqueeState.ts` - Attract mode / title screen
 - `src/playState.ts` - Main gameplay state
-- `src/tank.ts` - Base tank class
-- `src/playerTank.ts` - Player-controlled tank
-- `src/enemyTank.ts` - AI-controlled enemy tanks
-- `src/projectile.ts` - Projectile/bullet implementation
-- `src/radar.ts` - In-game radar system
-- `src/types.ts` - Type definitions
+- `src/tank.ts` - Base tank class with shared functionality
+- `src/playerTank.ts` - Player-controlled tank implementation
+- `src/enemyTank.ts` - AI-controlled enemy tanks with patrol and pursuit behavior
+- `src/projectile.ts` - Physics-based projectile implementation
+- `src/radar.ts` - In-game radar system for enemy detection
+- `src/voxelWorld.ts` - Voxel-based world management
+- `src/arena.ts` - Environment generation with different zones
+- `src/voxelObjects.ts` - Definitions for voxel-based environment objects
+- `src/physics.ts` - Physics system integration with Rapier
+- `src/types.ts` - Type definitions for game entities
 
-## Controls
+## Development Roadmap
 
-[Add control information here]
+- [ ] Additional enemy tank types with varied behaviors
+- [ ] Power-ups and tank upgrades
+- [ ] Multiplayer support
+- [ ] Level progression with increasing difficulty
+- [ ] Additional environments and weather effects
+- [ ] Mobile/touch controls support
 
 ## License
 
@@ -78,5 +117,7 @@ This project is licensed under the ISC License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- Original Voxelzone game created by Atari in 1980
-- Inspired by the vector graphics style of early arcade games
+- Inspired by classic arcade tank combat games
+- Built with [Three.js](https://threejs.org/) for 3D rendering
+- Physics powered by [Rapier](https://rapier.rs/)
+- Developed with TypeScript and Vite
