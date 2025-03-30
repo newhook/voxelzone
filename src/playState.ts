@@ -1733,6 +1733,14 @@ export class PlayState implements IGameState {
 
   // Check if a spawn position is valid (not inside obstacles, other tanks, etc.)
   private isValidSpawnPosition(position: THREE.Vector3): boolean {
+    // Check if position is within arena boundaries
+    const halfWorldSize = this.config.worldSize / 2 - 20; // Same calculation used for arena creation
+    const distanceFromCenter = Math.sqrt(position.x * position.x + position.z * position.z);
+    if (distanceFromCenter > halfWorldSize) {
+      // Position is outside the arena
+      return false;
+    }
+
     // Check distance from player
     const minPlayerDistance = 15;
     if (this.player.mesh.position.distanceTo(position) < minPlayerDistance) {
@@ -1780,9 +1788,14 @@ export class PlayState implements IGameState {
 
     if (voxelResult.voxel !== null) {
       const pos = voxelToWorld(voxelResult.voxel);
-      // If there's a voxel within 2 units above the spawn point, it's invalid
-      const distance = Math.sqrt(pos.x * pos.x + pos.z + pos.z)
-      if (distance < 2) {
+      // Fix: Calculate distance properly from the position to the voxel position
+      const voxelDistance = Math.sqrt(
+        Math.pow(pos.x - position.x, 2) + 
+        Math.pow(pos.z - position.z, 2)
+      );
+      
+      // If there's a voxel within 2 units of the spawn point, it's invalid
+      if (voxelDistance < 2) {
         return false;
       }
     }
