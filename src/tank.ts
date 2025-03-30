@@ -17,6 +17,7 @@ export abstract class Tank implements Vehicle {
   lastFired: number;
   hitpoints: number = 15; // Starting hitpoints for all tanks
   maxHitpoints: number = 15; // Maximum hitpoints, will increase with levels
+  currentProjectiles: number = 50; // Default projectile count, will be overridden by PlayerTank
   protected turretContainer: THREE.Object3D;
   protected cannonMesh: THREE.Mesh;
   protected state: PlayState;
@@ -168,8 +169,17 @@ export abstract class Tank implements Vehicle {
   }
 
   fire(): void {
-    if (!this.canFire) return;
-
+    if (!this.canFire || this.currentProjectiles <= 0) return;
+    
+    // Deduct a projectile
+    this.currentProjectiles--;
+    
+    // Update ammo display
+    if (this.state instanceof PlayState) {
+      this.state.updateAmmoDisplay();
+    }
+    
+    // Continue with normal firing logic
     // Calculate the cannon tip position in world space
     const cannonWorldPosition = new THREE.Vector3();
     this.cannonMesh.getWorldPosition(cannonWorldPosition);

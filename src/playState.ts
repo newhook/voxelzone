@@ -899,8 +899,9 @@ export class PlayState implements IGameState {
     this.input = this.setupInputHandlers();
     this.radar.show();
 
-    // Initialize health display
+    // Initialize health and ammo displays
     this.showHealthNotification();
+    this.updateAmmoDisplay();
 
     // Enable the input cooldown to prevent accidental firing on game start
     this.inputCooldownActive = true;
@@ -1781,5 +1782,39 @@ export class PlayState implements IGameState {
 
     // If all checks pass, the position is valid
     return true;
+  }
+
+  // Update the UI to show player's ammo count
+  public updateAmmoDisplay(): void {
+    // Remove any existing ammo display
+    const existingDisplay = document.getElementById('ammo-display');
+    if (existingDisplay) {
+      existingDisplay.remove();
+    }
+
+    // Create a container for the ammo display
+    const ammoContainer = document.createElement('div');
+    ammoContainer.id = 'ammo-display';
+    ammoContainer.style.position = 'absolute';
+    ammoContainer.style.top = '120px';
+    ammoContainer.style.right = '20px';
+    ammoContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    ammoContainer.style.padding = '10px';
+    ammoContainer.style.borderRadius = '5px';
+    ammoContainer.style.border = '1px solid #ffaa00';
+    ammoContainer.style.color = '#ffaa00';
+    ammoContainer.style.fontFamily = 'monospace';
+    ammoContainer.style.fontSize = '16px';
+    ammoContainer.style.display = 'flex';
+    ammoContainer.style.alignItems = 'center';
+    ammoContainer.style.width = '150px';
+
+    // Create the ammo text container
+    const ammoText = document.createElement('div');
+    ammoText.id = 'ammo-text';
+    ammoText.textContent = `AMMO: ${this.player.currentProjectiles}/${this.player.maxProjectiles}`;
+    ammoContainer.appendChild(ammoText);
+
+    document.body.appendChild(ammoContainer);
   }
 }
