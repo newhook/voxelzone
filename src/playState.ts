@@ -1755,9 +1755,9 @@ export class PlayState implements IGameState {
     }
     
     timerElements.forEach(item => {
-      // Get the end time from the data attribute
-      const endTime = parseInt(item.getAttribute('data-endTime') || '0', 10);
-      const type = item.getAttribute('data-type');
+      // Use dataset to get properties instead of getAttribute to handle camelCase correctly
+      const endTime = parseInt(item.dataset.endTime || '0', 10);
+      const type = item.dataset.type;
       
       // Calculate time remaining
       const timeRemaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
